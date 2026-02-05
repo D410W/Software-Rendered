@@ -21,7 +21,7 @@ pub struct Renderer {
   
   // geometry
   ugb: UnifiedGeometryBuffer,
-  // depth_buffer: Vec<f32>,
+  depth_buffer: Vec<f32>,
 }
 
 impl Renderer {
@@ -38,7 +38,7 @@ impl Renderer {
       frametime_hist: VecDeque::<f32>::from(vec![16.6; 10]),
       
       ugb,
-      // depth_buffer: Vec::new(),
+      depth_buffer: Vec::new(),
     }
   }
   
@@ -61,19 +61,19 @@ impl Renderer {
 
     let mut buffer = surface.buffer_mut().unwrap();
     buffer.fill(20 | (20 << 8) | (20 << 16));
-    // self.depth_buffer.resize(buffer.width().get() as usize * buffer.height().get() as usize, 0.0);
-    // self.depth_buffer.fill(f32::INFINITY);
+    self.depth_buffer.resize(buffer.width().get() as usize * buffer.height().get() as usize, 0.0);
+    self.depth_buffer.fill(f32::INFINITY);
         
     self.rasterize_model(&mut buffer, Instance{
       model_index: 0,
       position: Vec3{x: 0.0, y: 0.0, z: -3.0},
-      rotation: self.frame_counter as f32 / 200.0,
+      rotation: self.frame_counter as f32 / 300.0,
     });
     
     // let width = buffer.width().get();
     // for y in 0..buffer.height().get() {
     //   for x in 0..width {
-    //     let color: u32 = ((1.0 - f32::log(self.depth_buffer[(y * width + x) as usize], 100.0))*100.0) as u32 % 256;
+    //     let color: u32 = ((-200.0 * self.depth_buffer[(y * width + x) as usize]) as u32).min(255);
     //     buffer[(y * width + x) as usize] = color | color << 8 | color << 16;
     //   }
     // }
@@ -150,9 +150,9 @@ impl Renderer {
     let area = edge_function(v0_2d, v1_2d, v2_2d);
     if area <= 0.0 { return; } // backface culling
     
-    // let inv_z0 = 1.0 / v0.pos.z;
-    // let inv_z1 = 1.0 / v1.pos.z;
-    // let inv_z2 = 1.0 / v2.pos.z;
+    let inv_z0 = 1.0 / v0.pos.z;
+    let inv_z1 = 1.0 / v1.pos.z;
+    let inv_z2 = 1.0 / v2.pos.z;
     
     for sy in min.1..=max.1 {
       for sx in min.0..=max.0 {
@@ -167,13 +167,13 @@ impl Renderer {
           // let is_inside_back = dist0 <= 0.0 && dist1 <= 0.0 && dist2 <= 0.0;
           
           if is_inside_front {
-            // let dbuffer_idx = sy * screen_size.0 + sx;
-            // let z_dist = weight0 * inv_z0 + weight1 * inv_z1 + weight2 * inv_z2;
-            // if z_dist < self.depth_buffer[dbuffer_idx] {
-            //   self.depth_buffer[dbuffer_idx] = z_dist;
-            // } else {
-            //   continue;
-            // }
+            let dbuffer_idx = sy * screen_size.0 + sx;
+            let z_dist = weight0 * inv_z0 + weight1 * inv_z1 + weight2 * inv_z2;
+            if z_dist < self.depth_buffer[dbuffer_idx] {
+              self.depth_buffer[dbuffer_idx] = z_dist;
+            } else {
+              continue;
+            }
             
             let r = (v0.color.x.abs() * 255.0) as u32 % 256;
             let g = (v1.color.y.abs() * 255.0) as u32 % 256;
