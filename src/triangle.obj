@@ -1,0 +1,10 @@
+# Blender 4.0.2
+# www.blender.org
+mtllib untitled.mtl
+o Trig
+v 1.000000 1.000000 -1.000000
+v 1.000000 -1.000000 -1.000000
+v 1.000000 1.000000 1.000000
+s 0
+usemtl Material
+f 2 3 1

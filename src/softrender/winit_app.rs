@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::num::NonZeroU32;
 
 use winit::application::ApplicationHandler;
 use winit::event_loop::{ActiveEventLoop, OwnedDisplayHandle};
@@ -43,6 +44,16 @@ impl ApplicationHandler for App {
       WindowEvent::CloseRequested => {
         println!("The close button was pressed. Stopping...");
         event_loop.exit();
+      },
+      WindowEvent::Resized(new_size) => {
+        let Some(ref mut surface) = self.surface else {
+          eprintln!("Resized fired before Resumed or after Suspended");
+          return;
+        };
+        surface.resize(
+          NonZeroU32::new(new_size.width).unwrap(),
+          NonZeroU32::new(new_size.height).unwrap(),
+        ).unwrap();
       },
       WindowEvent::RedrawRequested => {
         let Some(ref mut surface) = self.surface else {
