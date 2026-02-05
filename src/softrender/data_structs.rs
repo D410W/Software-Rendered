@@ -4,6 +4,7 @@ pub struct Vec2 {
   pub y: f32,
 }
 
+#[allow(unused)]
 impl Vec2 {
   pub fn from_u32(x: u32, y: u32) -> Self {
     Vec2{ x: x as f32, y: y as f32 }
@@ -60,7 +61,15 @@ pub struct Vec3 {
   pub z: f32,
 }
 
+#[allow(unused)]
 impl Vec3 {
+  pub fn from_u32(x: u32, y: u32, z: u32) -> Self {
+    Vec3{ x: x as f32, y: y as f32, z: z as f32 }
+  }
+  pub fn from_usize(x: usize, y: usize, z: usize) -> Self {
+    Vec3{ x: x as f32, y: y as f32, z: z as f32 }
+  }
+  
   pub fn on_new_basis(&self, bx: Vec3, by: Vec3, bz: Vec3) -> Vec3 {
     bx * self.x + by * self.y + bz * self.z
   }
@@ -69,11 +78,14 @@ impl Vec3 {
 impl std::ops::Add<Vec3> for Vec3 { type Output = Vec3;
   fn add(self, rhs: Vec3) -> Vec3 { Vec3{ x: self.x + rhs.x, y: self.y + rhs.y, z: self.z + rhs.z} }
 }
+impl std::ops::Sub<Vec3> for Vec3 { type Output = Vec3;
+  fn sub(self, rhs: Vec3) -> Vec3 { Vec3{ x: self.x - rhs.x, y: self.y - rhs.y, z: self.z - rhs.z} }
+}
 impl std::ops::Mul<f32> for Vec3 { type Output = Vec3;
   fn mul(self, rhs: f32) -> Vec3 { Vec3{ x: self.x * rhs, y: self.y * rhs, z: self.z * rhs} }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Vertex {
   pub pos: Vec3,
   pub color: Vec3,

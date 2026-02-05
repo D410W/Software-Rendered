@@ -1,6 +1,6 @@
 use crate::softrender::{Vec2, Vec3, Vertex};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ModelInfo {
   pub base_vertex: usize, // Where this model starts in the global vertex buffer
   pub index_start: usize, // Where this model's indices start
@@ -101,13 +101,18 @@ impl UnifiedGeometryBuffer {
 
 #[inline(always)]
 pub fn edge_function(a: &Vec2, b: &Vec2, p: &Vec2) -> f32 {
-    // expanded math of (b - a).orthogonal().dot(p - a)
-    // old code:
-    //   let bottom_side = (v0 - v2).orthogonal();
-    //   let right_side = v1 - v2;
-    //   return bottom_side.dot(right_side);
-    
-    ((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)) / 2.0
+  // expanded math of (b - a).orthogonal().dot(p - a)
+  // old code:
+  //   let bottom_side = (v0 - v2).orthogonal();
+  //   let right_side = v1 - v2;
+  //   return bottom_side.dot(right_side);
+  
+  ((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)) / 2.0
+}
+
+#[inline(always)]
+pub fn edge_function_raw(a: &Vec2, b: &Vec2, px: f32, py: f32) -> f32 {
+  ((px - a.x) * (b.y - a.y) - (py - a.y) * (b.x - a.x)) / 2.0
 }
 
 #[inline(always)]
