@@ -15,9 +15,10 @@ type SoftBuffer<'a> = softbuffer::Buffer<'a, OwnedDisplayHandle, Rc<Window>>;
 
 pub struct Renderer {
   // fps tracking
+  pub program_start: Instant,
   last_frame: Instant,
   fps_measurement: f32,
-  frame_counter: u64,
+  pub frame_counter: u64,
   
   frametime_hist: VecDeque<f32>,
   
@@ -41,6 +42,7 @@ impl Renderer {
     ugb.load_obj("src/untitled.obj".to_string()).unwrap();
     
     Renderer{
+      program_start: Instant::now(),
       last_frame: Instant::now(),
       fps_measurement: 0.0,
       frame_counter: 0,
@@ -56,7 +58,7 @@ impl Renderer {
         render_config: RenderConfig{
           face_culling: CullingEnum::Back,
           depth_buffering: true,
-          debug_bounding_boxes: true,
+          debug_bounding_boxes: false,
           z_pyramid: true,
           anti_aliasing: false,
         },
@@ -125,7 +127,7 @@ impl Renderer {
       self.camera_info,
     );
     
-    for id in (0..5).rev() {
+    for id in 0..5 {
       self.rasterize_model(&mut buffer,
         Instance{
           model_index: 0,
@@ -337,7 +339,9 @@ impl Renderer {
                         v0: &Vertex,  v1: &Vertex,  v2: &Vertex)
   {
     let area = edge_function(v0_2d, v1_2d, v2_2d);
+    // println!("{:?}", (v0_2d, v1_2d, v2_2d));
     let inv_area = 1.0 / area;
+    
     match camera_info.render_config.face_culling {
       CullingEnum::Both => { return; }
       CullingEnum::Front => {
@@ -354,8 +358,8 @@ impl Renderer {
     
     // calculating bounding box's min and max
     for v in [v0_2d, v1_2d, v2_2d] {
-      let ux = v.x as usize;
-      let uy = v.y as usize;
+      let ux = v.x.max(0.0) as usize;
+      let uy = v.y.max(0.0) as usize;
       
       if ux < min.0 { min.0 = ux }
       if ux > max.0 { max.0 = ux }
@@ -368,9 +372,9 @@ impl Renderer {
     max.0 = max.0.min(screen_size.0 - 1);
     max.1 = max.1.min(screen_size.1 - 1);
     
-    let inv_z0 = 1.0 / v0.pos.z;
-    let inv_z1 = 1.0 / v1.pos.z;
-    let inv_z2 = 1.0 / v2.pos.z;
+    let inv_z0 = inv_area / v0.pos.z;
+    let inv_z1 = inv_area / v1.pos.z;
+    let inv_z2 = inv_area / v2.pos.z;
     
     let r = (v0.color.x.abs() * 255.0) as u32 % 256;
     let g = (v1.color.y.abs() * 255.0) as u32 % 256;
@@ -380,14 +384,28 @@ impl Renderer {
     
     if max.0 > 0 && max.1 > 0 && min.0 < screen_size.0 && min.1 < screen_size.1 { self.triangles_rendered += 1; }
     
+    // pre-calculating weights
+    let step_x_w0 = v2_2d.y - v1_2d.y;
+    let step_x_w1 = v0_2d.y - v2_2d.y;
+    let step_x_w2 = v1_2d.y - v0_2d.y;
+    
+    let step_y_w0 = v1_2d.x - v2_2d.x;
+    let step_y_w1 = v2_2d.x - v0_2d.x;
+    let step_y_w2 = v0_2d.x - v1_2d.x;
+    
+    let mut w0_row = edge_function_raw(v1_2d, v2_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
+    let mut w1_row = edge_function_raw(v2_2d, v0_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
+    let mut w2_row = edge_function_raw(v0_2d, v1_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
+    
     for sy in min.1..=max.1 {
+    
+      let mut weight0 = w0_row;
+      let mut weight1 = w1_row;
+      let mut weight2 = w2_row;
+      
       let mut row_idx = sy * screen_size.0 + min.0;
-      for sx in min.0..=max.0 {
-        let weight0 = edge_function_raw(v1_2d, v2_2d, sx as f32, sy as f32) * inv_area;
-        let weight1 = edge_function_raw(v2_2d, v0_2d, sx as f32, sy as f32) * inv_area;
-        let weight2 = 1.0 - weight0 - weight1;
-        
-        let is_inside_tri = weight0 >= 0.0 && weight1 >= 0.0 && weight2 >= 0.0;
+      for _ in min.0..=max.0 {
+        let is_inside_tri = (weight0 >= 0.0) && (weight1 >= 0.0) && (weight2 >= 0.0);
         
         if is_inside_tri {
           if camera_info.render_config.depth_buffering {
@@ -401,12 +419,18 @@ impl Renderer {
             buffer[row_idx] = tri_color;
           }
         }
+        
+        weight0 += step_x_w0;
+        weight1 += step_x_w1;
+        weight2 += step_x_w2;
+
         row_idx += 1;
       }
+      
+      w0_row += step_y_w0;
+      w1_row += step_y_w1;
+      w2_row += step_y_w2;
     }
     
-    for v in [v0, v1, v2] {
-      buffer[v.pos.y as usize * screen_size.0 + v.pos.x as usize] = 0 | 255 << 8 | 0 << 16;
-    }
   }
 }

@@ -122,12 +122,12 @@ pub fn edge_function(a: &Vec2, b: &Vec2, p: &Vec2) -> f32 {
   //   let right_side = v1 - v2;
   //   return bottom_side.dot(right_side);
   
-  ((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)) / 2.0
+  (p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)
 }
 
 #[inline(always)]
 pub fn edge_function_raw(a: &Vec2, b: &Vec2, px: f32, py: f32) -> f32 {
-  ((px - a.x) * (b.y - a.y) - (py - a.y) * (b.x - a.x)) / 2.0
+  (px - a.x) * (b.y - a.y) - (py - a.y) * (b.x - a.x)
 }
 
 #[inline(always)]

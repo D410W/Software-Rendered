@@ -44,6 +44,10 @@ impl ApplicationHandler for App {
     match event {
       WindowEvent::CloseRequested => {
         println!("The close button was pressed. Stopping...");
+        
+        let final_fps = self.renderer.frame_counter as f32 / self.renderer.program_start.elapsed().as_secs_f32();
+        println!("average fps through execution: {}.", final_fps);
+        
         event_loop.exit();
       },
       WindowEvent::Resized(new_size) => {
