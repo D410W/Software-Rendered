@@ -6,6 +6,9 @@ pub struct Vec2 {
 
 #[allow(unused)]
 impl Vec2 {
+  pub fn zero() -> Self {
+    Vec2{ x: 0.0, y: 0.0 }
+  }
   pub fn from_u32(x: u32, y: u32) -> Self {
     Vec2{ x: x as f32, y: y as f32 }
   }
@@ -86,7 +89,57 @@ impl std::ops::Mul<f32> for Vec3 { type Output = Vec3;
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct Vec4 {
+  pub w: f32,
+  pub x: f32,
+  pub y: f32,
+  pub z: f32,
+}
+
+impl Vec4 {
+  #[inline(always)]
+  pub fn to_u32(&self) -> u32 {
+    u32::from_le_bytes([self.x.clamp(0.0, 255.0) as u8,
+                        self.y.clamp(0.0, 255.0) as u8,
+                        self.z.clamp(0.0, 255.0) as u8,
+                        self.w.clamp(0.0, 255.0) as u8
+    ])
+  }
+}
+
+impl std::ops::Add<Vec4> for Vec4 { type Output = Vec4;
+  fn add(self, rhs: Vec4) -> Vec4 { Vec4{ x: self.x + rhs.x, y: self.y + rhs.y, z: self.z + rhs.z, w: self.w + rhs.w} }
+}
+impl std::ops::Sub<Vec4> for Vec4 { type Output = Vec4;
+  fn sub(self, rhs: Vec4) -> Vec4 { Vec4{ x: self.x - rhs.x, y: self.y - rhs.y, z: self.z - rhs.z, w: self.w + rhs.w} }
+}
+impl std::ops::Mul<f32> for Vec4 { type Output = Vec4;
+  fn mul(self, rhs: f32) -> Vec4 { Vec4{ x: self.x * rhs, y: self.y * rhs, z: self.z * rhs, w: self.w * rhs} }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct Vertex {
   pub pos: Vec3,
-  pub color: Vec3,
+  pub uv: Vec2,
+  pub color: Color,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Color {
+  pub r: u8,
+  pub g: u8,
+  pub b: u8,
+  pub a: u8,
+}
+
+impl Color {
+    // Fast conversion that compiles down to a simple move on Little Endian
+  #[inline(always)]
+  pub fn to_u32(&self) -> u32 {
+    u32::from_le_bytes([self.r, self.g, self.b, self.a])
+  }
+  #[inline(always)]
+  pub fn to_vec4(&self) -> Vec4 {
+    Vec4{ w: self.a as f32, x: self.r as f32, y: self.g as f32, z: self.b as f32}
+  }
 }

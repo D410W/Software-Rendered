@@ -1,10 +1,12 @@
-use crate::softrender::{Vec2, Vec3, Vertex};
+use crate::softrender::{Vec2, Vec3, Vertex, Color};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ModelInfo {
   pub base_vertex: usize, // Where this model starts in the global vertex buffer
   pub index_start: usize, // Where this model's indices start
   pub index_count: usize, // How many indices to draw
+  pub texture_id: usize,
+  
   pub min_extents: Vec3,
   pub max_extents: Vec3,
 }
@@ -30,6 +32,7 @@ impl UnifiedGeometryBuffer {
       base_vertex: self.vertices.len(),
       index_start: self.indices.len(),
       index_count: 0,
+      texture_id: 0,
       min_extents: Vec3{ x:  f32::INFINITY, y:  f32::INFINITY, z:  f32::INFINITY },
       max_extents: Vec3{ x: -f32::INFINITY, y: -f32::INFINITY, z: -f32::INFINITY },
     };
@@ -57,7 +60,13 @@ impl UnifiedGeometryBuffer {
             
             self.vertices.push( Vertex{
               pos: Vec3{x, y, z},
-              color: Vec3{x: (z * 1.2) % 1.0, y: (z * 1.3) % 1.0, z: (z * 1.5) % 1.0}
+              uv: Vec2::zero(),
+              color: Color{
+                r: ((z * 7120.0).abs() % 255.0) as u8,
+                g: ((z * 13233.3).abs() % 255.0) as u8,
+                b: ((z * 155999.5).abs() % 255.0) as u8,
+                a: 255,
+              }
             });
           }
         },
@@ -124,7 +133,6 @@ pub fn edge_function(a: &Vec2, b: &Vec2, p: &Vec2) -> f32 {
   
   (p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)
 }
-
 #[inline(always)]
 pub fn edge_function_raw(a: &Vec2, b: &Vec2, px: f32, py: f32) -> f32 {
   (px - a.x) * (b.y - a.y) - (py - a.y) * (b.x - a.x)

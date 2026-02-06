@@ -21,7 +21,7 @@ pub struct RenderConfig {
   pub depth_buffering: bool,
   pub debug_bounding_boxes: bool,
   pub z_pyramid: bool,
-  pub anti_aliasing: bool,
+  // pub anti_aliasing: bool,
 }
 
 #[derive(Debug, Clone, Copy)]

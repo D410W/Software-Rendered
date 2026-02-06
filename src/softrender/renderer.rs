@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 
 use crate::softrender::{CameraInfo, RenderConfig, CullingEnum,
                         Instance, UnifiedGeometryBuffer, Vertex,
-                        Vec3, Vec2}; // structs
+                        Vec3, Vec2, TextureManager}; // structs
 use crate::softrender::{edge_function, edge_function_raw, translate_to_screen}; // funcs
 
 type SoftSurface = softbuffer::Surface<OwnedDisplayHandle, Rc<Window>>;
@@ -28,6 +28,9 @@ pub struct Renderer {
   downscaled_db: Vec<f32>,
   
   pub camera_info: CameraInfo,
+  
+  // texturing
+  pub tm: TextureManager,
   
   // debug
   triangles_rendered: u32,
@@ -60,9 +63,11 @@ impl Renderer {
           depth_buffering: true,
           debug_bounding_boxes: false,
           z_pyramid: true,
-          anti_aliasing: false,
+          // anti_aliasing: false,
         },
       },
+      
+      tm: TextureManager::new(),
       
       triangles_rendered: 0,
     }
@@ -127,7 +132,7 @@ impl Renderer {
       self.camera_info,
     );
     
-    for id in 0..5 {
+    for id in 0..10 {
       self.rasterize_model(&mut buffer,
         Instance{
           model_index: 0,
@@ -376,12 +381,6 @@ impl Renderer {
     let inv_z1 = inv_area / v1.pos.z;
     let inv_z2 = inv_area / v2.pos.z;
     
-    let r = (v0.color.x.abs() * 255.0) as u32 % 256;
-    let g = (v1.color.y.abs() * 255.0) as u32 % 256;
-    let b = (v2.color.z.abs() * 255.0) as u32 % 256;
-    
-    let tri_color = b | g << 8 | r << 16;
-    
     if max.0 > 0 && max.1 > 0 && min.0 < screen_size.0 && min.1 < screen_size.1 { self.triangles_rendered += 1; }
     
     // pre-calculating weights
@@ -397,6 +396,11 @@ impl Renderer {
     let mut w1_row = edge_function_raw(v2_2d, v0_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
     let mut w2_row = edge_function_raw(v0_2d, v1_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
     
+    // calculating interpolated colors
+    let inv_col0 = v0.color.to_vec4() * inv_area;
+    let inv_col1 = v1.color.to_vec4() * inv_area;
+    let inv_col2 = v2.color.to_vec4() * inv_area;
+    
     for sy in min.1..=max.1 {
     
       let mut weight0 = w0_row;
@@ -408,15 +412,19 @@ impl Renderer {
         let is_inside_tri = (weight0 >= 0.0) && (weight1 >= 0.0) && (weight2 >= 0.0);
         
         if is_inside_tri {
+          let p_color = inv_col0 * weight0 +
+                        inv_col1 * weight1 +
+                        inv_col2 * weight2;
+          
           if camera_info.render_config.depth_buffering {
             let z_dist = weight0 * inv_z0 + weight1 * inv_z1 + weight2 * inv_z2;
             
             if z_dist < self.depth_buffer[row_idx] {
               self.depth_buffer[row_idx] = z_dist;
-              buffer[row_idx] = tri_color;
+              buffer[row_idx] = p_color.to_u32();
             }
           } else {
-            buffer[row_idx] = tri_color;
+            buffer[row_idx] = p_color.to_u32();
           }
         }
         
