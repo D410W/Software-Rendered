@@ -5,6 +5,7 @@ use winit::application::ApplicationHandler;
 use winit::event_loop::{ActiveEventLoop, OwnedDisplayHandle};
 use winit::event::WindowEvent;
 use winit::window::{Window, WindowId};
+use winit::keyboard::Key;
 
 use crate::softrender::Renderer;
 
@@ -55,6 +56,21 @@ impl ApplicationHandler for App {
           NonZeroU32::new(new_size.height).unwrap(),
         ).unwrap();
       },
+      WindowEvent::KeyboardInput{ device_id: _, event: key_event, is_synthetic: _ } => {
+        if key_event.state == winit::event::ElementState::Pressed && let Key::Character(c) = key_event.logical_key {
+          match c.as_bytes()[0] as char {
+            'w' => { self.renderer.camera_info.position.z -= 0.1; }
+            's' => { self.renderer.camera_info.position.z += 0.1; }
+            'a' => { self.renderer.camera_info.position.x -= 0.1; }
+            'd' => { self.renderer.camera_info.position.x += 0.1; }
+            'q' => { self.renderer.camera_info.position.y -= 0.1; }
+            'e' => { self.renderer.camera_info.position.y += 0.1; }
+            'j' => { self.renderer.camera_info.rotation += 0.1; }
+            'l' => { self.renderer.camera_info.rotation -= 0.1; }
+            _ => (),
+          }
+        }
+      }
       WindowEvent::RedrawRequested => {
         let Some(ref mut surface) = self.surface else {
           eprintln!("RedrawRequested fired before Resumed or after Suspended");

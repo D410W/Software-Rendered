@@ -5,6 +5,8 @@ pub struct ModelInfo {
   pub base_vertex: usize, // Where this model starts in the global vertex buffer
   pub index_start: usize, // Where this model's indices start
   pub index_count: usize, // How many indices to draw
+  pub min_extents: Vec3,
+  pub max_extents: Vec3,
 }
 
 #[derive(Default)]
@@ -28,6 +30,8 @@ impl UnifiedGeometryBuffer {
       base_vertex: self.vertices.len(),
       index_start: self.indices.len(),
       index_count: 0,
+      min_extents: Vec3{ x:  f32::INFINITY, y:  f32::INFINITY, z:  f32::INFINITY },
+      max_extents: Vec3{ x: -f32::INFINITY, y: -f32::INFINITY, z: -f32::INFINITY },
     };
     
     for line in contents.split('\n') {
@@ -35,7 +39,7 @@ impl UnifiedGeometryBuffer {
       let mut words = line.split_whitespace();
       // println!("{:?}", words);
       match words.next().unwrap_or("") {
-        "v" => {
+        "v" => { // vertex
           let xs = words.next().unwrap();
           let ys = words.next().unwrap();
           let zs = words.next().unwrap();
@@ -43,6 +47,13 @@ impl UnifiedGeometryBuffer {
             let x: f32 = xs.parse().unwrap();
             let y: f32 = ys.parse().unwrap();
             let z: f32 = zs.parse().unwrap();
+            
+            m_info.min_extents.x = m_info.min_extents.x.min(x);
+            m_info.min_extents.y = m_info.min_extents.y.min(y);
+            m_info.min_extents.z = m_info.min_extents.z.min(z);
+            m_info.max_extents.x = m_info.max_extents.x.max(x);
+            m_info.max_extents.y = m_info.max_extents.y.max(y);
+            m_info.max_extents.z = m_info.max_extents.z.max(z);
             
             self.vertices.push( Vertex{
               pos: Vec3{x, y, z},
@@ -76,9 +87,13 @@ impl UnifiedGeometryBuffer {
     Ok(())
   }
   
-  pub fn init(&mut self) {
-    let _ = self.load_obj("src/monke.obj".to_string());
-  }
+  // pub fn init(&mut self) {
+  //   let _ = self.load_obj("src/monke.obj".to_string());
+  // }
+  
+  // pub fn load_obj(&mut self, file_path: String) {
+  //   let _ = self.load_obj(file_path);
+  // }
   
   fn parse_triangle_obj(&mut self, verts: &[&str]) -> usize {
     for index in verts {

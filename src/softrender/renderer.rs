@@ -24,13 +24,21 @@ pub struct Renderer {
   // geometry
   ugb: UnifiedGeometryBuffer,
   depth_buffer: Vec<f32>,
+  downscaled_db: Vec<f32>,
+  
+  pub camera_info: CameraInfo,
+  
+  // debug
+  triangles_rendered: u32,
 }
 
 impl Renderer {
   
   pub fn new() -> Self {
     let mut ugb = UnifiedGeometryBuffer::default();
-    ugb.init();
+    ugb.load_obj("src/monke.obj".to_string()).unwrap();
+    ugb.load_obj("src/dennis.obj".to_string()).unwrap();
+    ugb.load_obj("src/untitled.obj".to_string()).unwrap();
     
     Renderer{
       last_frame: Instant::now(),
@@ -41,6 +49,20 @@ impl Renderer {
       
       ugb,
       depth_buffer: Vec::new(),
+      downscaled_db: Vec::new(),
+      camera_info: CameraInfo{
+        position: Vec3{ x: 0.0, y: 0.0, z: 1.3 },
+        rotation: 0.0,
+        render_config: RenderConfig{
+          face_culling: CullingEnum::Back,
+          depth_buffering: true,
+          debug_bounding_boxes: true,
+          z_pyramid: true,
+          anti_aliasing: false,
+        },
+      },
+      
+      triangles_rendered: 0,
     }
   }
   
@@ -60,47 +82,97 @@ impl Renderer {
   pub fn redraw(&mut self, surface: &mut SoftSurface, window: &Window) {
   
     self.update_fps();
+    self.triangles_rendered = 0;
 
     let mut buffer = surface.buffer_mut().unwrap();
     buffer.fill(20 | (20 << 8) | (20 << 16));
-    self.depth_buffer.resize(buffer.width().get() as usize * buffer.height().get() as usize, 0.0);
+    
+    self.depth_buffer.resize(buffer.len(), 0.0);
     self.depth_buffer.fill(f32::INFINITY);
     
-    for id in 0..10 {
+    let downscaled_factor = 8;
+    self.downscaled_db.resize(buffer.len() / downscaled_factor, 0.0);
+    self.downscaled_db.fill(0.0);
+    
+    // for id in 0..10 {
+    //   self.rasterize_model(&mut buffer,
+    //     Instance{
+    //       model_index: 0,
+    //       position: Vec3{x: -6.0 + ((id%5)*3) as f32, y: -2.0, z: -10.0 - ((id/5)*3) as f32},
+    //       rotation: 0.0,
+    //     },
+    //     CameraInfo{
+    //       position: Vec3::from_u32(0, 0, 0),
+    //       rotation: f32::sin(self.frame_counter as f32 / 30.0),
+    //       render_config: RenderConfig{
+    //         face_culling: CullingEnum::Back,
+    //         depth_buffering: true,
+    //         debug_bounding_boxes: false,
+    //         z_pyramid: true,
+    //         anti_aliasing: false,
+    //       },
+    //     },
+    //   );
+    // }
+    
+    {
+    self.rasterize_model(&mut buffer,
+      Instance{
+        model_index: 2,
+        position: Vec3{ x: 0.0, y: 0.0, z: -2.0 },
+        rotation: 0.0,
+      },
+      self.camera_info,
+    );
+    
+    for id in (0..5).rev() {
       self.rasterize_model(&mut buffer,
         Instance{
           model_index: 0,
-          position: Vec3{x: -7.5 + ((id%5)*3) as f32, y: -2.0, z: -3.0 - ((id/5)*3) as f32},
+          position: Vec3{ x: 0.0, y: 0.0, z: -4.0 - id as f32 },
           rotation: 0.0,
         },
-        CameraInfo{
-          position: Vec3::from_u32(0, 0, 0),
-          rotation: f32::sin(self.frame_counter as f32 / 30.0),
-          render_config: RenderConfig{
-            face_culling: CullingEnum::Back,
-            depth_buffering: true,
-            anti_aliasing: false,
-          },
-        },
+        self.camera_info,
       );
     }
+    }
+    
+    // self.rasterize_model(&mut buffer,
+    //   Instance{
+    //     model_index: 1,
+    //     position: Vec3{x: 0.0, y: -90.0, z: -100.0},
+    //     rotation: self.frame_counter as f32 / 100.0,
+    //   },
+    //   CameraInfo{
+    //     position: Vec3::from_u32(0, 0, 0),
+    //     rotation: 0.0,
+    //     render_config: RenderConfig{
+    //       face_culling: CullingEnum::Back,
+    //       depth_buffering: true,
+    //       debug_bounding_boxes: false,
+    //       z_pyramid: true,
+    //       anti_aliasing: false,
+    //     },
+    //   },
+    // );
     
     // let width = buffer.width().get();
     // for y in 0..buffer.height().get() {
     //   for x in 0..width {
-    //     let color: u32 = ((-200.0 * self.depth_buffer[(y * width + x) as usize]) as u32).min(255);
+    //     // let color: u32 = ((-200.0 * self.depth_buffer[(y * width + x) as usize]) as u32).min(255);
+    //     let color: u32 = ((-200.0 * self.downscaled_db[((y >> 3) * (width >> 3) + (x >> 3)) as usize]) as u32).min(255);
     //     buffer[(y * width + x) as usize] = color | color << 8 | color << 16;
     //   }
     // }
     
+    println!("triangles rendered this frame: {}", self.triangles_rendered);
     println!("{:?}, fps: {}, low: {}", window.inner_size(), self.fps_measurement, 1.0 / self.frametime_hist.iter().max_by( |a, b| a.partial_cmp(b).unwrap() ).unwrap());
     buffer.present().unwrap();
   }
   
   pub fn rasterize_model(&mut self, buffer: &mut SoftBuffer, instance_info: Instance, camera_info: CameraInfo) {
     let model = self.ugb.models[instance_info.model_index];
-    // let draw_indices = &self.ugb.indices[model.index_start..(model.index_start + model.index_count)];
-    
+            
     let swidth = buffer.width().get() as usize;
     let sheight = buffer.height().get() as usize;
     let screen_size = (swidth, sheight);
@@ -120,7 +192,77 @@ impl Renderer {
     let final_rot_z = rot_z.on_new_basis(cam_rot_x, cam_rot_y, cam_rot_z);
     let final_rel_pos = (instance_info.position - camera_info.position)
                         .on_new_basis(cam_rot_x, cam_rot_y, cam_rot_z);
+    
+    let mut model_bounding_min = Vec2{ x:  f32::INFINITY, y:  f32::INFINITY };
+    let mut model_bounding_max = Vec2{ x: -f32::INFINITY, y: -f32::INFINITY };
+    let mut closest_z: f32 = 0.0;
+    
+    let mut is_visible: bool = {
+      let mut ans = false;
+      for i in 0..8 {
+        let corner = Vec3{
+          x: if i & 1 == 0 { model.min_extents.x } else { model.max_extents.x },
+          y: if i & 2 == 0 { model.min_extents.y } else { model.max_extents.y },
+          z: if i & 4 == 0 { model.min_extents.z } else { model.max_extents.z },
+        }.on_new_basis(final_rot_x, final_rot_y, final_rot_z) + final_rel_pos;
+        
+        if corner.z >= 0.0 { continue; }
+        
+        let projected = translate_to_screen(&corner, &screen_size);
+        
+        model_bounding_min.x = model_bounding_min.x.min(projected.x);
+        model_bounding_min.y = model_bounding_min.y.min(projected.y);
+        model_bounding_max.x = model_bounding_max.x.max(projected.x);
+        model_bounding_max.y = model_bounding_max.y.max(projected.y);
+        closest_z = closest_z.min(corner.z);
+        
+        if projected.x >= 0.0 && projected.y >= 0.0 &&
+           projected.x < swidth as f32 && projected.y < sheight as f32 { ans = true; }
+        
+      }
+      ans
+    };
+    
+    if !is_visible { return; }
+    
+    // culling through downscaled depth-buffer
+    let pyramid_bounds = if camera_info.render_config.z_pyramid {
+      closest_z = 1.0 / closest_z;
+      // println!("{}", closest_z);
+      is_visible = false;
+      let start_y = (model_bounding_min.y as usize) >> 3;
+      let end_y   = (model_bounding_max.y as usize) >> 3;
+      let start_x = (model_bounding_min.x as usize) >> 3;
+      let end_x   = (model_bounding_max.x as usize) >> 3;
 
+      let max_tile_y = (screen_size.1 >> 3).saturating_sub(1);
+      let max_tile_x = (screen_size.0 >> 3).saturating_sub(1);
+      
+      let sx = start_x.min(max_tile_x);
+      let ex = end_x.min(max_tile_x);
+      let sy = start_y.min(max_tile_y);
+      let ey = end_y.min(max_tile_y);
+      
+      for ty in sy..=ey {
+        for tx in sx..=ex {
+          if closest_z < self.downscaled_db[ty * (swidth >> 3) + tx] {
+            is_visible = true;
+            break;
+          }
+        }
+        if is_visible { break; }
+      }
+      
+      if !is_visible {
+        return;
+      }
+      
+      Some((sx, ex, sy, ey))
+    } else {
+      None
+    };
+
+    // triangles
     for i in (0..model.index_count).step_by(3) {
       let idx0 = self.ugb.indices[model.index_start + i];
       let idx1 = self.ugb.indices[model.index_start + i+1];
@@ -134,9 +276,11 @@ impl Renderer {
       v1.pos = v1.pos.on_new_basis(final_rot_x, final_rot_y, final_rot_z) + final_rel_pos;
       v2.pos = v2.pos.on_new_basis(final_rot_x, final_rot_y, final_rot_z) + final_rel_pos;
       
+      let mut should_skip = false;
       for v in [&v0, &v1, &v2] {
-        if v.pos.z > 0.0 { return }
+        if v.pos.z > 0.0 { should_skip = true; break; }
       }
+      if should_skip { continue }
       // Rasterize triangle (v0, v1, v2)
       {
         let v0_2d = translate_to_screen(&v0.pos, &screen_size);
@@ -147,6 +291,44 @@ impl Renderer {
       }
       
     }
+    
+    if camera_info.render_config.debug_bounding_boxes {
+      for id in 0..4 {
+        let p = (
+          if id & 1 == 0 { model_bounding_min.x } else { model_bounding_max.x } as usize,
+          if id & 2 == 0 { model_bounding_min.y } else { model_bounding_max.y } as usize
+        );
+        
+        if p.0 >= swidth || p.1 >= sheight { continue }
+        buffer[p.1 * swidth + p.0] = 0 | 255 << 8 | 0 << 16;
+      }
+    }
+    
+    // updating the downscaled_db
+    if let Some((sx, ex, sy, ey)) = pyramid_bounds {
+      for ty in sy..=ey {
+        for tx in sx..=ex {
+          // println!("{:?}", (tx, ty));
+          self.update_downscaled_depth(screen_size.0, tx, ty);
+        }
+      }
+    }
+  }
+  
+  fn update_downscaled_depth(&mut self, screen_width: usize, x: usize, y: usize) {    
+    let mut max_depth: f32 = 0.0; // self.downscaled_db[y * (width >> 3) + x];
+    
+    let start_x = x << 3;
+    let start_y = y << 3;
+    
+    for y in start_y..(start_y + 8) {
+      for x in start_x..(start_x + 8) {
+        max_depth = max_depth.min(self.depth_buffer[y * screen_width + x]);
+      }
+    }
+    
+    self.downscaled_db[y * (screen_width >> 3) + x] = max_depth;
+    
   }
   
   fn render_triangle_2d(&mut self, buffer: &mut SoftBuffer,
@@ -157,6 +339,7 @@ impl Renderer {
     let area = edge_function(v0_2d, v1_2d, v2_2d);
     let inv_area = 1.0 / area;
     match camera_info.render_config.face_culling {
+      CullingEnum::Both => { return; }
       CullingEnum::Front => {
         if area >= 0.0 { return; }
       },
@@ -169,6 +352,7 @@ impl Renderer {
     let mut min = (screen_size.0, screen_size.1);
     let mut max = (0, 0);
     
+    // calculating bounding box's min and max
     for v in [v0_2d, v1_2d, v2_2d] {
       let ux = v.x as usize;
       let uy = v.y as usize;
@@ -194,37 +378,35 @@ impl Renderer {
     
     let tri_color = b | g << 8 | r << 16;
     
+    if max.0 > 0 && max.1 > 0 && min.0 < screen_size.0 && min.1 < screen_size.1 { self.triangles_rendered += 1; }
+    
     for sy in min.1..=max.1 {
       let mut row_idx = sy * screen_size.0 + min.0;
       for sx in min.0..=max.0 {
-        // if sx > 0 && sy > 0 && sx < screen_size.0 && sy < screen_size.1 {
-          let weight0 = edge_function_raw(v1_2d, v2_2d, sx as f32, sy as f32) * inv_area;
-          let weight1 = edge_function_raw(v2_2d, v0_2d, sx as f32, sy as f32) * inv_area;
-          let weight2 = 1.0 - weight0 - weight1;
-          
-          let is_inside_tri = weight0 >= 0.0 && weight1 >= 0.0 && weight2 >= 0.0;
-          
-          if is_inside_tri {
-            if camera_info.render_config.depth_buffering {
-              let z_dist = weight0 * inv_z0 + weight1 * inv_z1 + weight2 * inv_z2;
-              
-              if z_dist < self.depth_buffer[row_idx] {
-                self.depth_buffer[row_idx] = z_dist;
-                buffer[row_idx] = tri_color;
-              }
-            } else {
+        let weight0 = edge_function_raw(v1_2d, v2_2d, sx as f32, sy as f32) * inv_area;
+        let weight1 = edge_function_raw(v2_2d, v0_2d, sx as f32, sy as f32) * inv_area;
+        let weight2 = 1.0 - weight0 - weight1;
+        
+        let is_inside_tri = weight0 >= 0.0 && weight1 >= 0.0 && weight2 >= 0.0;
+        
+        if is_inside_tri {
+          if camera_info.render_config.depth_buffering {
+            let z_dist = weight0 * inv_z0 + weight1 * inv_z1 + weight2 * inv_z2;
+            
+            if z_dist < self.depth_buffer[row_idx] {
+              self.depth_buffer[row_idx] = z_dist;
               buffer[row_idx] = tri_color;
             }
+          } else {
+            buffer[row_idx] = tri_color;
           }
-        // } else {
-        //   println!("x: {}, y: {}", sx, sy);
-        // }
+        }
         row_idx += 1;
       }
     }
     
-    // for v in [v0, v1, v2] {
-    //   buffer[v.y as usize * screen_size.0 + v.x as usize] = 0 | 0 << 8 | 255 << 16;
-    // }
+    for v in [v0, v1, v2] {
+      buffer[v.pos.y as usize * screen_size.0 + v.pos.x as usize] = 0 | 255 << 8 | 0 << 16;
+    }
   }
 }

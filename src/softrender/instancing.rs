@@ -12,12 +12,15 @@ pub enum CullingEnum {
   None,
   Front,
   Back,
+  Both,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct RenderConfig {
   pub face_culling: CullingEnum,
   pub depth_buffering: bool,
+  pub debug_bounding_boxes: bool,
+  pub z_pyramid: bool,
   pub anti_aliasing: bool,
 }
 
