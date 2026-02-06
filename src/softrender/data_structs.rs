@@ -99,6 +99,10 @@ pub struct Vec4 {
 impl Vec4 {
   #[inline(always)]
   pub fn to_u32(&self) -> u32 {
+    u32::from_le_bytes([self.x as u8, self.y as u8, self.z as u8, self.w as u8 ])
+  }
+  #[inline(always)]
+  pub fn to_u32_safe(&self) -> u32 {
     u32::from_le_bytes([self.x.clamp(0.0, 255.0) as u8,
                         self.y.clamp(0.0, 255.0) as u8,
                         self.z.clamp(0.0, 255.0) as u8,
@@ -109,6 +113,9 @@ impl Vec4 {
 
 impl std::ops::Add<Vec4> for Vec4 { type Output = Vec4;
   fn add(self, rhs: Vec4) -> Vec4 { Vec4{ x: self.x + rhs.x, y: self.y + rhs.y, z: self.z + rhs.z, w: self.w + rhs.w} }
+}
+impl std::ops::AddAssign<Vec4> for Vec4 {
+  fn add_assign(&mut self, rhs: Vec4) { self.x += rhs.x; self.y += rhs.y; self.z += rhs.z; self.w += rhs.w; }
 }
 impl std::ops::Sub<Vec4> for Vec4 { type Output = Vec4;
   fn sub(self, rhs: Vec4) -> Vec4 { Vec4{ x: self.x - rhs.x, y: self.y - rhs.y, z: self.z - rhs.z, w: self.w + rhs.w} }

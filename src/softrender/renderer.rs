@@ -344,7 +344,7 @@ impl Renderer {
                         v0: &Vertex,  v1: &Vertex,  v2: &Vertex)
   {
     let area = edge_function(v0_2d, v1_2d, v2_2d);
-    // println!("{:?}", (v0_2d, v1_2d, v2_2d));
+    if area.abs() < 1e-6 { return; }
     let inv_area = 1.0 / area;
     
     match camera_info.render_config.face_culling {
@@ -401,6 +401,12 @@ impl Renderer {
     let inv_col1 = v1.color.to_vec4() * inv_area;
     let inv_col2 = v2.color.to_vec4() * inv_area;
     
+    let step_x_color = inv_col0 * step_x_w0 + inv_col1 * step_x_w1 + inv_col2 * step_x_w2;
+    let step_y_color = inv_col0 * step_y_w0 + inv_col1 * step_y_w1 + inv_col2 * step_y_w2;
+    
+    let mut row_color = inv_col0 * w0_row + inv_col1 * w1_row + inv_col2 * w2_row;
+    
+    // the dreaded loop
     for sy in min.1..=max.1 {
     
       let mut weight0 = w0_row;
@@ -408,29 +414,28 @@ impl Renderer {
       let mut weight2 = w2_row;
       
       let mut row_idx = sy * screen_size.0 + min.0;
+      let mut current_color = row_color;
+      
       for _ in min.0..=max.0 {
         let is_inside_tri = (weight0 >= 0.0) && (weight1 >= 0.0) && (weight2 >= 0.0);
         
         if is_inside_tri {
-          let p_color = inv_col0 * weight0 +
-                        inv_col1 * weight1 +
-                        inv_col2 * weight2;
-          
           if camera_info.render_config.depth_buffering {
             let z_dist = weight0 * inv_z0 + weight1 * inv_z1 + weight2 * inv_z2;
             
             if z_dist < self.depth_buffer[row_idx] {
               self.depth_buffer[row_idx] = z_dist;
-              buffer[row_idx] = p_color.to_u32();
+              buffer[row_idx] = current_color.to_u32();
             }
           } else {
-            buffer[row_idx] = p_color.to_u32();
+            buffer[row_idx] = current_color.to_u32();
           }
         }
         
         weight0 += step_x_w0;
         weight1 += step_x_w1;
         weight2 += step_x_w2;
+        current_color += step_x_color;
 
         row_idx += 1;
       }
@@ -438,6 +443,7 @@ impl Renderer {
       w0_row += step_y_w0;
       w1_row += step_y_w1;
       w2_row += step_y_w2;
+      row_color += step_y_color;
     }
     
   }
