@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use crate::softrender::Vec3;
 
 #[derive(Debug, Clone, Copy)]
@@ -21,6 +23,7 @@ pub struct RenderConfig {
   pub depth_buffering: bool,
   pub debug_bounding_boxes: bool,
   pub z_pyramid: bool,
+  pub affine_color: bool,
   // pub anti_aliasing: bool,
 }
 

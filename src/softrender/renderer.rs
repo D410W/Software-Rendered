@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 
 use crate::softrender::{CameraInfo, RenderConfig, CullingEnum,
                         Instance, UnifiedGeometryBuffer, Vertex,
-                        Vec3, Vec2, TextureManager}; // structs
+                        Vec4, Vec3, Vec2, TextureManager}; // structs
 use crate::softrender::{edge_function, edge_function_raw, translate_to_screen}; // funcs
 
 type SoftSurface = softbuffer::Surface<OwnedDisplayHandle, Rc<Window>>;
@@ -63,6 +63,7 @@ impl Renderer {
           depth_buffering: true,
           debug_bounding_boxes: false,
           z_pyramid: true,
+          affine_color: true,
           // anti_aliasing: false,
         },
       },
@@ -101,67 +102,47 @@ impl Renderer {
     self.downscaled_db.resize(buffer.len() / downscaled_factor, 0.0);
     self.downscaled_db.fill(0.0);
     
-    // for id in 0..10 {
-    //   self.rasterize_model(&mut buffer,
-    //     Instance{
-    //       model_index: 0,
-    //       position: Vec3{x: -6.0 + ((id%5)*3) as f32, y: -2.0, z: -10.0 - ((id/5)*3) as f32},
-    //       rotation: 0.0,
-    //     },
-    //     CameraInfo{
-    //       position: Vec3::from_u32(0, 0, 0),
-    //       rotation: f32::sin(self.frame_counter as f32 / 30.0),
-    //       render_config: RenderConfig{
-    //         face_culling: CullingEnum::Back,
-    //         depth_buffering: true,
-    //         debug_bounding_boxes: false,
-    //         z_pyramid: true,
-    //         anti_aliasing: false,
-    //       },
-    //     },
-    //   );
-    // }
-    
-    {
-    self.rasterize_model(&mut buffer,
-      Instance{
-        model_index: 2,
-        position: Vec3{ x: 0.0, y: 0.0, z: -2.0 },
-        rotation: 0.0,
-      },
-      self.camera_info,
-    );
-    
-    for id in 0..10 {
+    for id in 0..50 {
       self.rasterize_model(&mut buffer,
         Instance{
           model_index: 0,
-          position: Vec3{ x: 0.0, y: 0.0, z: -4.0 - id as f32 },
+          position: Vec3{x: -6.0 + ((id%5)*3) as f32, y: -2.0, z: -5.0 - ((id/5)*3) as f32},
           rotation: 0.0,
         },
         self.camera_info,
       );
     }
-    }
     
+    // {
     // self.rasterize_model(&mut buffer,
     //   Instance{
-    //     model_index: 1,
-    //     position: Vec3{x: 0.0, y: -90.0, z: -100.0},
-    //     rotation: self.frame_counter as f32 / 100.0,
-    //   },
-    //   CameraInfo{
-    //     position: Vec3::from_u32(0, 0, 0),
+    //     model_index: 2,
+    //     position: Vec3{ x: 0.0, y: 0.0, z: -2.0 },
     //     rotation: 0.0,
-    //     render_config: RenderConfig{
-    //       face_culling: CullingEnum::Back,
-    //       depth_buffering: true,
-    //       debug_bounding_boxes: false,
-    //       z_pyramid: true,
-    //       anti_aliasing: false,
-    //     },
     //   },
+    //   self.camera_info,
     // );
+    
+    // for id in 0..10 {
+    //   self.rasterize_model(&mut buffer,
+    //     Instance{
+    //       model_index: 0,
+    //       position: Vec3{ x: 0.0, y: 0.0, z: -4.0 - id as f32 },
+    //       rotation: 0.0,
+    //     },
+    //     self.camera_info,
+    //   );
+    // }
+    // }
+    
+    self.rasterize_model(&mut buffer,
+      Instance{
+        model_index: 1,
+        position: Vec3{x: 0.0, y: -90.0, z: -100.0},
+        rotation: self.frame_counter as f32 / 100.0,
+      },
+      self.camera_info,
+    );
     
     // let width = buffer.width().get();
     // for y in 0..buffer.height().get() {
@@ -179,7 +160,7 @@ impl Renderer {
   
   pub fn rasterize_model(&mut self, buffer: &mut SoftBuffer, instance_info: Instance, camera_info: CameraInfo) {
     let model = self.ugb.models[instance_info.model_index];
-            
+    
     let swidth = buffer.width().get() as usize;
     let sheight = buffer.height().get() as usize;
     let screen_size = (swidth, sheight);
@@ -202,10 +183,9 @@ impl Renderer {
     
     let mut model_bounding_min = Vec2{ x:  f32::INFINITY, y:  f32::INFINITY };
     let mut model_bounding_max = Vec2{ x: -f32::INFINITY, y: -f32::INFINITY };
-    let mut closest_z: f32 = 0.0;
+    let mut closest_z = -f32::INFINITY;
     
     let mut is_visible: bool = {
-      let mut ans = false;
       for i in 0..8 {
         let corner = Vec3{
           x: if i & 1 == 0 { model.min_extents.x } else { model.max_extents.x },
@@ -221,13 +201,17 @@ impl Renderer {
         model_bounding_min.y = model_bounding_min.y.min(projected.y);
         model_bounding_max.x = model_bounding_max.x.max(projected.x);
         model_bounding_max.y = model_bounding_max.y.max(projected.y);
-        closest_z = closest_z.min(corner.z);
-        
-        if projected.x >= 0.0 && projected.y >= 0.0 &&
-           projected.x < swidth as f32 && projected.y < sheight as f32 { ans = true; }
-        
+        closest_z = closest_z.max(corner.z);
       }
-      ans
+      
+      if model_bounding_max.x > 0.0 &&
+         model_bounding_max.y > 0.0 &&
+         model_bounding_min.x < screen_size.0 as f32 &&
+         model_bounding_min.y < screen_size.1 as f32 {
+        true
+      } else {
+        false
+      }
     };
     
     if !is_visible { return; }
@@ -260,9 +244,7 @@ impl Renderer {
         if is_visible { break; }
       }
       
-      if !is_visible {
-        return;
-      }
+      if !is_visible { return; }
       
       Some((sx, ex, sy, ey))
     } else {
@@ -294,7 +276,7 @@ impl Renderer {
         let v1_2d = translate_to_screen(&v1.pos, &screen_size);
         let v2_2d = translate_to_screen(&v2.pos, &screen_size);
         
-        self.render_triangle_2d(buffer, &screen_size, &camera_info, &v0_2d, &v1_2d, &v2_2d, &v0, &v1, &v2);
+        self.render_triangle_2d(buffer, &screen_size, &camera_info, model.texture_id, &v0_2d, &v1_2d, &v2_2d, &v0, &v1, &v2);
       }
       
     }
@@ -338,8 +320,8 @@ impl Renderer {
     
   }
   
-  fn render_triangle_2d(&mut self, buffer: &mut SoftBuffer,
-                        screen_size: &(usize, usize), camera_info: &CameraInfo, 
+  fn render_triangle_2d(&mut self, buffer: &mut SoftBuffer, screen_size: &(usize, usize),
+                        camera_info: &CameraInfo, texture_id: usize,
                         v0_2d: &Vec2, v1_2d: &Vec2, v2_2d: &Vec2,
                         v0: &Vertex,  v1: &Vertex,  v2: &Vertex)
   {
@@ -376,12 +358,15 @@ impl Renderer {
     min.1 = min.1.max(0);
     max.0 = max.0.min(screen_size.0 - 1);
     max.1 = max.1.min(screen_size.1 - 1);
+        
+    if max.0 > 0 && max.1 > 0 && min.0 < screen_size.0 && min.1 < screen_size.1 {
+      self.triangles_rendered += 1;
+    } else {
+      return;
+    }
     
-    let inv_z0 = inv_area / v0.pos.z;
-    let inv_z1 = inv_area / v1.pos.z;
-    let inv_z2 = inv_area / v2.pos.z;
+    // calculating uv weights
     
-    if max.0 > 0 && max.1 > 0 && min.0 < screen_size.0 && min.1 < screen_size.1 { self.triangles_rendered += 1; }
     
     // pre-calculating weights
     let step_x_w0 = v2_2d.y - v1_2d.y;
@@ -396,15 +381,44 @@ impl Renderer {
     let mut w1_row = edge_function_raw(v2_2d, v0_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
     let mut w2_row = edge_function_raw(v0_2d, v1_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
     
+    // calculating z interpolation
+    let mut current_z: f32;
+    let (step_x_z, step_y_z, mut row_z) = {
+      let inv_z0 = inv_area / v0.pos.z;
+      let inv_z1 = inv_area / v1.pos.z;
+      let inv_z2 = inv_area / v2.pos.z;
+    
+      let step_x_z = inv_z0 * step_x_w0 + inv_z1 * step_x_w1 + inv_z2 * step_x_w2;
+      let step_y_z = inv_z0 * step_y_w0 + inv_z1 * step_y_w1 + inv_z2 * step_y_w2;
+      
+      let row_z = inv_z0 * w0_row + inv_z1 * w1_row + inv_z2 * w2_row;
+      
+      (step_x_z, step_y_z, row_z)
+    };
+    
     // calculating interpolated colors
-    let inv_col0 = v0.color.to_vec4() * inv_area;
-    let inv_col1 = v1.color.to_vec4() * inv_area;
-    let inv_col2 = v2.color.to_vec4() * inv_area;
+    let step_x_color: Vec4;
+    let step_y_color: Vec4;
+    let mut row_color: Vec4;
+    let mut current_color: Vec4;
     
-    let step_x_color = inv_col0 * step_x_w0 + inv_col1 * step_x_w1 + inv_col2 * step_x_w2;
-    let step_y_color = inv_col0 * step_y_w0 + inv_col1 * step_y_w1 + inv_col2 * step_y_w2;
-    
-    let mut row_color = inv_col0 * w0_row + inv_col1 * w1_row + inv_col2 * w2_row;
+    if camera_info.render_config.affine_color {
+      let inv_col0 = v0.color.to_vec4() * inv_area;
+      let inv_col1 = v1.color.to_vec4() * inv_area;
+      let inv_col2 = v2.color.to_vec4() * inv_area;
+      
+      step_x_color = inv_col0 * step_x_w0 + inv_col1 * step_x_w1 + inv_col2 * step_x_w2;
+      step_y_color = inv_col0 * step_y_w0 + inv_col1 * step_y_w1 + inv_col2 * step_y_w2;
+      
+      row_color = inv_col0 * w0_row + inv_col1 * w1_row + inv_col2 * w2_row;
+    } else {
+      step_x_color = Default::default();
+      step_y_color = Default::default();
+      row_color = Default::default();
+      
+      current_color = v0.color.to_vec4() + v1.color.to_vec4() + v2.color.to_vec4();
+      current_color /= 3.0;
+    }
     
     // the dreaded loop
     for sy in min.1..=max.1 {
@@ -414,17 +428,18 @@ impl Renderer {
       let mut weight2 = w2_row;
       
       let mut row_idx = sy * screen_size.0 + min.0;
-      let mut current_color = row_color;
+      current_color = row_color;
+      current_z = row_z;
       
       for _ in min.0..=max.0 {
         let is_inside_tri = (weight0 >= 0.0) && (weight1 >= 0.0) && (weight2 >= 0.0);
         
         if is_inside_tri {
           if camera_info.render_config.depth_buffering {
-            let z_dist = weight0 * inv_z0 + weight1 * inv_z1 + weight2 * inv_z2;
+            // let z_dist = weight0 * inv_area_z0 + weight1 * inv_area_z1 + weight2 * inv_area_z2;
             
-            if z_dist < self.depth_buffer[row_idx] {
-              self.depth_buffer[row_idx] = z_dist;
+            if current_z < self.depth_buffer[row_idx] {
+              self.depth_buffer[row_idx] = current_z;
               buffer[row_idx] = current_color.to_u32();
             }
           } else {
@@ -436,6 +451,7 @@ impl Renderer {
         weight1 += step_x_w1;
         weight2 += step_x_w2;
         current_color += step_x_color;
+        current_z += step_x_z;
 
         row_idx += 1;
       }
@@ -444,7 +460,10 @@ impl Renderer {
       w1_row += step_y_w1;
       w2_row += step_y_w2;
       row_color += step_y_color;
+      row_z += step_y_z;
     }
     
   }
 }
+
+

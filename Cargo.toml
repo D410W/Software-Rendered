@@ -9,3 +9,9 @@ winit = { version = "0.30.12", default-features = false, features = [
   "x11",
   "rwh_06",
 ] }
+
+[profile.release]
+opt-level = 3               # Use slightly better optimizations.
+overflow-checks = false     # Disable integer overflow checks.
+# debug = true       # Include debug symbols in the release binary
+lto = "thin"       # Link Time Optimization (helps inline across modules)
