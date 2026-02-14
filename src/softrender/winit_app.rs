@@ -7,27 +7,30 @@ use winit::event::WindowEvent;
 use winit::window::{Window, WindowId};
 use winit::keyboard::Key;
 
-use crate::softrender::Renderer;
+use crate::softrender::{Renderer, GameState};
 
-pub struct App {
+pub struct App<T: GameState> {
   window: Option<Rc<Window>>,
   surface: Option<softbuffer::Surface<OwnedDisplayHandle, Rc<Window>>>,
   
   renderer: Renderer,
+  game_state: T,
 }
 
-impl App {
+impl<T: GameState> App<T> {
   pub fn new() -> Self {
+    let mut renderer = Renderer::new();
     App{
       window: None,
       surface: None,
       
-      renderer: Renderer::new(),
+      game_state: T::new(&mut renderer),
+      renderer,
     }
   }
 }
 
-impl ApplicationHandler for App {
+impl<T: GameState> ApplicationHandler for App<T> {
   fn resumed(&mut self, event_loop: &ActiveEventLoop) {
     self.window = Some(
       Rc::new(event_loop.create_window(Window::default_attributes()).unwrap())
@@ -69,8 +72,10 @@ impl ApplicationHandler for App {
             'd' => { self.renderer.camera_info.position.x += 0.1; }
             'q' => { self.renderer.camera_info.position.y -= 0.1; }
             'e' => { self.renderer.camera_info.position.y += 0.1; }
-            'j' => { self.renderer.camera_info.rotation += 0.1; }
-            'l' => { self.renderer.camera_info.rotation -= 0.1; }
+            'j' => { self.renderer.camera_info.rotation.y += 0.1; }
+            'l' => { self.renderer.camera_info.rotation.y -= 0.1; }
+            'i' => { self.renderer.camera_info.rotation.x += 0.1; }
+            'k' => { self.renderer.camera_info.rotation.x -= 0.1; }
             _ => (),
           }
         }
@@ -84,6 +89,11 @@ impl ApplicationHandler for App {
         
         self.renderer.redraw(surface, &window);
         
+        // if self.renderer.frame_counter >= 100 {
+        //   let final_fps = self.renderer.frame_counter as f32 / self.renderer.program_start.elapsed().as_secs_f32();
+        //   println!("average fps through execution: {}.", final_fps);
+        //   event_loop.exit();
+        // }
         window.request_redraw();
       }
       _ => (),

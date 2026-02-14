@@ -34,6 +34,10 @@ impl std::ops::Add<Vec2> for Vec2 { type Output = Vec2;
   #[inline(always)]
   fn add(self, rhs: Vec2) -> Vec2 { Vec2{ x: self.x + rhs.x, y: self.y + rhs.y} }
 }
+impl std::ops::AddAssign<Vec2> for Vec2 {
+  #[inline(always)]
+  fn add_assign(&mut self, rhs: Vec2) { self.x += rhs.x; self.y += rhs.y; }
+}
 impl std::ops::Sub<Vec2> for Vec2 { type Output = Vec2;
   #[inline(always)]
   fn sub(self, rhs: Vec2) -> Vec2 { Vec2{ x: self.x - rhs.x, y: self.y - rhs.y} }
@@ -94,11 +98,25 @@ impl Vec3 {
   pub fn on_new_basis(&self, bx: Vec3, by: Vec3, bz: Vec3) -> Vec3 {
     bx * self.x + by * self.y + bz * self.z
   }
+  
+  #[inline(always)]
+  pub fn magnitude(&self) -> f32 {
+    f32::sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
+  }
+  #[inline(always)]
+  pub fn normalize(&self) -> Vec3 {
+    *self/self.magnitude()
+  }
+  
 }
 
 impl std::ops::Add<Vec3> for Vec3 { type Output = Vec3;
   #[inline(always)]
   fn add(self, rhs: Vec3) -> Vec3 { Vec3{ x: self.x + rhs.x, y: self.y + rhs.y, z: self.z + rhs.z} }
+}
+impl std::ops::AddAssign<Vec3> for Vec3 {
+  #[inline(always)]
+  fn add_assign(&mut self, rhs: Vec3) { self.x += rhs.x; self.y += rhs.y; self.z += rhs.z; }
 }
 impl std::ops::Sub<Vec3> for Vec3 { type Output = Vec3;
   #[inline(always)]
@@ -107,6 +125,10 @@ impl std::ops::Sub<Vec3> for Vec3 { type Output = Vec3;
 impl std::ops::Mul<f32> for Vec3 { type Output = Vec3;
   #[inline(always)]
   fn mul(self, rhs: f32) -> Vec3 { Vec3{ x: self.x * rhs, y: self.y * rhs, z: self.z * rhs} }
+}
+impl std::ops::Div<f32> for Vec3 { type Output = Vec3;
+  #[inline(always)]
+  fn div(self, rhs: f32) -> Vec3 { Vec3{ x: self.x / rhs, y: self.y / rhs, z: self.z / rhs} }
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -130,6 +152,10 @@ impl Vec4 {
                         self.w.clamp(0.0, 255.0) as u8
     ])
   }
+  #[inline(always)]
+  pub fn inverse(&self) -> Vec4 {
+    Vec4{ x: 1.0 / self.x, y: 1.0 / self.y, z: 1.0 / self.z, w: 1.0 / self.w }
+  }
 }
 
 impl std::ops::Add<Vec4> for Vec4 { type Output = Vec4;
@@ -140,31 +166,50 @@ impl std::ops::AddAssign<Vec4> for Vec4 {
   #[inline(always)]
   fn add_assign(&mut self, rhs: Vec4) { self.x += rhs.x; self.y += rhs.y; self.z += rhs.z; self.w += rhs.w; }
 }
-impl std::ops::DivAssign<f32> for Vec4 {
-  #[inline(always)]
-  fn div_assign(&mut self, rhs: f32) { self.x /= rhs; self.y /= rhs; self.z /= rhs; self.w /= rhs; }
-}
 impl std::ops::Sub<Vec4> for Vec4 { type Output = Vec4;
   #[inline(always)]
   fn sub(self, rhs: Vec4) -> Vec4 { Vec4{ x: self.x - rhs.x, y: self.y - rhs.y, z: self.z - rhs.z, w: self.w + rhs.w} }
+}
+
+impl std::ops::Div<f32> for Vec4 { type Output = Vec4;
+  #[inline(always)]
+  fn div(self, rhs: f32) -> Vec4 { Vec4{ x: self.x / rhs, y: self.y / rhs, z: self.z / rhs, w: self.w / rhs} }
+}
+impl std::ops::DivAssign<f32> for Vec4 {
+  #[inline(always)]
+  fn div_assign(&mut self, rhs: f32) { self.x /= rhs; self.y /= rhs; self.z /= rhs; self.w /= rhs; }
 }
 impl std::ops::Mul<f32> for Vec4 { type Output = Vec4;
   #[inline(always)]
   fn mul(self, rhs: f32) -> Vec4 { Vec4{ x: self.x * rhs, y: self.y * rhs, z: self.z * rhs, w: self.w * rhs} }
 }
 
+// impl std::ops::Mul<Color> for Vec4 { type Output = Vec4;
+//   #[inline(always)]
+//   fn mul(self, rhs: Color) -> Vec4 {
+//     Vec4{
+//       x: self.x * rhs.r as f32 / 255.0,
+//       y: self.y * rhs.g as f32 / 255.0,
+//       z: self.z * rhs.b as f32 / 255.0,
+//       w: self.w * rhs.a as f32 / 255.0
+//     }
+//   }
+// }
+
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
   pub pos: Vec3,
+  pub normal: Vec3,
   pub uv: Vec2,
   pub color: Color,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Color {
-  pub r: u8,
-  pub g: u8,
   pub b: u8,
+  pub g: u8,
+  pub r: u8,
   pub a: u8,
 }
 
@@ -183,5 +228,31 @@ impl Color {
   #[inline(always)]
   pub fn to_vec4(&self) -> Vec4 {
     Vec4{ w: self.a as f32, x: self.r as f32, y: self.g as f32, z: self.b as f32}
+  }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AttributeBundle {
+  pub weight0: f32,
+  pub weight1: f32,
+  pub weight2: f32,
+  
+  pub z: f32,
+  pub color: Vec4,
+  pub uv: Vec2,
+  pub normal: Vec3,
+}
+
+impl std::ops::AddAssign<AttributeBundle> for AttributeBundle {
+  #[inline(always)]
+  fn add_assign(&mut self, rhs: AttributeBundle) {
+    self.weight0 += rhs.weight0;
+    self.weight1 += rhs.weight1;
+    self.weight2 += rhs.weight2;
+    
+    self.z += rhs.z;
+    self.color += rhs.color;
+    self.uv += rhs.uv;
+    self.normal += rhs.normal;
   }
 }

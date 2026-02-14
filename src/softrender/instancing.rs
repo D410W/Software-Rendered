@@ -6,7 +6,7 @@ use crate::softrender::Vec3;
 pub struct Instance {
   pub model_index: usize,
   pub position: Vec3,
-  pub rotation: f32, // yaw in radians
+  pub rotation: Vec3,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -20,7 +20,6 @@ pub enum CullingEnum {
 #[derive(Debug, Clone, Copy)]
 pub struct RenderConfig {
   pub face_culling: CullingEnum,
-  pub depth_buffering: bool,
   pub debug_bounding_boxes: bool,
   pub z_pyramid: bool,
   pub affine_color: bool,
@@ -30,6 +29,6 @@ pub struct RenderConfig {
 #[derive(Debug, Clone, Copy)]
 pub struct CameraInfo {
   pub position: Vec3,
-  pub rotation: f32, // yaw in radians
+  pub rotation: Vec3,
   pub render_config: RenderConfig,
 }

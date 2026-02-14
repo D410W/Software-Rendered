@@ -2,12 +2,15 @@ use winit::event_loop::OwnedDisplayHandle;
 use winit::window::Window;
 
 use std::rc::Rc;
+use std::io::Read;
+use std::fs::File;
 use std::time::Instant;
 use std::collections::VecDeque;
 
 use crate::softrender::{CameraInfo, RenderConfig, CullingEnum,
                         Instance, UnifiedGeometryBuffer, Vertex,
-                        Vec4, Vec3, Vec2, TextureManager}; // structs
+                        Vec4, Vec3, Vec2, TextureManager,
+                        AttributeBundle}; // structs
 use crate::softrender::{edge_function, edge_function_raw, translate_to_screen}; // funcs
 
 type SoftSurface = softbuffer::Surface<OwnedDisplayHandle, Rc<Window>>;
@@ -39,10 +42,34 @@ pub struct Renderer {
 impl Renderer {
   
   pub fn new() -> Self {
+    let mut file = File::open("src/dennis2.dds").expect("File not found");
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).expect("Read failed");
+
+    if &buffer[0..4] != b"DDS " { panic!("Not a DDS file"); }
+
+    let height = u32::from_le_bytes(buffer[12..16].try_into().unwrap()) as usize;
+    let width = u32::from_le_bytes(buffer[16..20].try_into().unwrap()) as usize;
+    let pitch = u32::from_le_bytes(buffer[20..24].try_into().unwrap()) as usize;
+    
+    println!("{}, {}, pitch: {}", width, height, pitch);
+
+    let pixel_data_start = 128;
+    let raw_bytes = &buffer[pixel_data_start..];
+
+    let u32_pixels: Vec<u32> = raw_bytes
+      .chunks_exact(4)
+      .map(|chunk| { u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) })
+      .collect();
+    
+    let mut tm = TextureManager::new();
+    tm.load_texture_u32_vmirror(u32_pixels.as_slice(), width, height);
+    
     let mut ugb = UnifiedGeometryBuffer::default();
     ugb.load_obj("src/monke.obj".to_string()).unwrap();
-    ugb.load_obj("src/dennis.obj".to_string()).unwrap();
+    ugb.load_textured_obj("src/dennis.obj".to_string(), 1).unwrap();
     ugb.load_obj("src/untitled.obj".to_string()).unwrap();
+    ugb.load_obj("src/monke_smooth.obj".to_string()).unwrap();
     
     Renderer{
       program_start: Instant::now(),
@@ -57,18 +84,16 @@ impl Renderer {
       downscaled_db: Vec::new(),
       camera_info: CameraInfo{
         position: Vec3{ x: 0.0, y: 0.0, z: 1.3 },
-        rotation: 0.0,
+        rotation: Vec3{ x: 0.0, y: 0.0, z: 0.0 },
         render_config: RenderConfig{
           face_culling: CullingEnum::Back,
-          depth_buffering: true,
           debug_bounding_boxes: false,
           z_pyramid: true,
           affine_color: true,
-          // anti_aliasing: false,
         },
       },
       
-      tm: TextureManager::new(),
+      tm,
       
       triangles_rendered: 0,
     }
@@ -102,16 +127,16 @@ impl Renderer {
     self.downscaled_db.resize(buffer.len() / downscaled_factor, 0.0);
     self.downscaled_db.fill(0.0);
     
-    for id in 0..50 {
-      self.rasterize_model(&mut buffer,
-        Instance{
-          model_index: 0,
-          position: Vec3{x: -6.0 + ((id%5)*3) as f32, y: -2.0, z: -5.0 - ((id/5)*3) as f32},
-          rotation: 0.0,
-        },
-        self.camera_info,
-      );
-    }
+    // for id in 0..50 {
+    //   self.rasterize_model(&mut buffer,
+    //     Instance{
+    //       model_index: 0,
+    //       position: Vec3{x: -6.0 + ((id%5)*3) as f32, y: -2.0, z: -5.0 - ((id/5)*3) as f32},
+    //       rotation: 0.0,
+    //     },
+    //     self.camera_info,
+    //   );
+    // }
     
     // {
     // self.rasterize_model(&mut buffer,
@@ -135,11 +160,20 @@ impl Renderer {
     // }
     // }
     
+    // self.rasterize_model(&mut buffer,
+    //   Instance{
+    //     model_index: 1,
+    //     position: Vec3{x: 0.0, y: -90.0, z: -100.0},
+    //     rotation: self.frame_counter as f32 / 100.0,
+    //   },
+    //   self.camera_info,
+    // );
+    
     self.rasterize_model(&mut buffer,
       Instance{
-        model_index: 1,
-        position: Vec3{x: 0.0, y: -90.0, z: -100.0},
-        rotation: self.frame_counter as f32 / 100.0,
+        model_index: 3,
+        position: Vec3{x: 0.0, y: 0.0, z: -3.0},
+        rotation: Vec3{x: 0.0, y: 0.0, z: 0.0},
       },
       self.camera_info,
     );
@@ -148,8 +182,9 @@ impl Renderer {
     // for y in 0..buffer.height().get() {
     //   for x in 0..width {
     //     // let color: u32 = ((-200.0 * self.depth_buffer[(y * width + x) as usize]) as u32).min(255);
-    //     let color: u32 = ((-200.0 * self.downscaled_db[((y >> 3) * (width >> 3) + (x >> 3)) as usize]) as u32).min(255);
-    //     buffer[(y * width + x) as usize] = color | color << 8 | color << 16;
+    //     // let color: u32 = ((-200.0 * self.downscaled_db[((y >> 3) * (width >> 3) + (x >> 3)) as usize]) as u32).min(255);
+    //     // buffer[(y * width + x) as usize] = color | color << 8 | color << 16;
+    //     buffer[(y * width + x) as usize] = self.tm.at_raw(1, x as usize, y as usize).to_u32();
     //   }
     // }
     
@@ -165,15 +200,19 @@ impl Renderer {
     let sheight = buffer.height().get() as usize;
     let screen_size = (swidth, sheight);
     
-    let (sin_theta, cos_theta) = (instance_info.rotation).sin_cos();
-    let rot_x = Vec3 { x: cos_theta, y: 0.0, z: -sin_theta };
-    let rot_y = Vec3 { x: 0.0,       y: 1.0, z: 0.0 };
-    let rot_z = Vec3 { x: sin_theta, y: 0.0, z: cos_theta };
+    let (sin_x, cos_x) = (instance_info.rotation.x).sin_cos();
+    let (sin_y, cos_y) = (instance_info.rotation.y).sin_cos();
+    let (sin_z, cos_z) = (instance_info.rotation.z).sin_cos();
+    let rot_x = Vec3 { x: cos_z*cos_y,                     y: sin_z*cos_y,                     z: -sin_y      };
+    let rot_y = Vec3 { x: cos_z*sin_y*sin_x - sin_z*cos_x, y: sin_z*sin_y*sin_x + cos_z*cos_x, z: cos_y*sin_x };
+    let rot_z = Vec3 { x: cos_z*sin_y*cos_x + sin_z*sin_x, y: sin_z*sin_y*cos_x - cos_z*sin_x, z: cos_y*cos_x };
     
-    let (sin_theta_cam, cos_theta_cam) = (-camera_info.rotation).sin_cos();
-    let cam_rot_x = Vec3 { x: cos_theta_cam, y: 0.0, z: -sin_theta_cam };
-    let cam_rot_y = Vec3 { x: 0.0,           y: 1.0, z: 0.0 };
-    let cam_rot_z = Vec3 { x: sin_theta_cam, y: 0.0, z: cos_theta_cam };
+    let (sin_x_cam, cos_x_cam) = (-camera_info.rotation.x).sin_cos();
+    let (sin_y_cam, cos_y_cam) = (-camera_info.rotation.y).sin_cos();
+    let (sin_z_cam, cos_z_cam) = (-camera_info.rotation.z).sin_cos();
+    let cam_rot_x = Vec3 { x: cos_z_cam*cos_y_cam,                                 y: sin_z_cam*cos_y_cam,                                 z: -sin_y_cam          };
+    let cam_rot_y = Vec3 { x: cos_z_cam*sin_y_cam*sin_x_cam - sin_z_cam*cos_x_cam, y: sin_z_cam*sin_y_cam*sin_x_cam + cos_z_cam*cos_x_cam, z: cos_y_cam*sin_x_cam };
+    let cam_rot_z = Vec3 { x: cos_z_cam*sin_y_cam*cos_x_cam + sin_z_cam*sin_x_cam, y: sin_z_cam*sin_y_cam*cos_x_cam - cos_z_cam*sin_x_cam, z: cos_y_cam*cos_x_cam };
     
     let final_rot_x = rot_x.on_new_basis(cam_rot_x, cam_rot_y, cam_rot_z);
     let final_rot_y = rot_y.on_new_basis(cam_rot_x, cam_rot_y, cam_rot_z);
@@ -250,6 +289,8 @@ impl Renderer {
     } else {
       None
     };
+    
+    let texture_size = self.tm.dimensions[model.texture_id];
 
     // triangles
     for i in (0..model.index_count).step_by(3) {
@@ -276,7 +317,7 @@ impl Renderer {
         let v1_2d = translate_to_screen(&v1.pos, &screen_size);
         let v2_2d = translate_to_screen(&v2.pos, &screen_size);
         
-        self.render_triangle_2d(buffer, &screen_size, &camera_info, model.texture_id, &v0_2d, &v1_2d, &v2_2d, &v0, &v1, &v2);
+        self.render_triangle_2d(buffer, screen_size, &camera_info, model.texture_id, texture_size, &v0_2d, &v1_2d, &v2_2d, &v0, &v1, &v2);
       }
       
     }
@@ -320,8 +361,8 @@ impl Renderer {
     
   }
   
-  fn render_triangle_2d(&mut self, buffer: &mut SoftBuffer, screen_size: &(usize, usize),
-                        camera_info: &CameraInfo, texture_id: usize,
+  fn render_triangle_2d(&mut self, buffer: &mut SoftBuffer, screen_size: (usize, usize),
+                        camera_info: &CameraInfo, texture_id: usize, texture_size: (usize, usize),
                         v0_2d: &Vec2, v1_2d: &Vec2, v2_2d: &Vec2,
                         v0: &Vertex,  v1: &Vertex,  v2: &Vertex)
   {
@@ -345,13 +386,13 @@ impl Renderer {
     
     // calculating bounding box's min and max
     for v in [v0_2d, v1_2d, v2_2d] {
-      let ux = v.x.max(0.0) as usize;
-      let uy = v.y.max(0.0) as usize;
+      let uns_x = v.x.max(0.0) as usize;
+      let uns_y = v.y.max(0.0) as usize;
       
-      if ux < min.0 { min.0 = ux }
-      if ux > max.0 { max.0 = ux }
-      if uy < min.1 { min.1 = uy }
-      if uy > max.1 { max.1 = uy }
+      if uns_x < min.0 { min.0 = uns_x }
+      if uns_x > max.0 { max.0 = uns_x }
+      if uns_y < min.1 { min.1 = uns_y }
+      if uns_y > max.1 { max.1 = uns_y }
     }
     
     min.0 = min.0.max(0);
@@ -364,10 +405,7 @@ impl Renderer {
     } else {
       return;
     }
-    
-    // calculating uv weights
-    
-    
+        
     // pre-calculating weights
     let step_x_w0 = v2_2d.y - v1_2d.y;
     let step_x_w1 = v0_2d.y - v2_2d.y;
@@ -377,92 +415,101 @@ impl Renderer {
     let step_y_w1 = v2_2d.x - v0_2d.x;
     let step_y_w2 = v0_2d.x - v1_2d.x;
     
-    let mut w0_row = edge_function_raw(v1_2d, v2_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
-    let mut w1_row = edge_function_raw(v2_2d, v0_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
-    let mut w2_row = edge_function_raw(v0_2d, v1_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
+    let w0_row = edge_function_raw(v1_2d, v2_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
+    let w1_row = edge_function_raw(v2_2d, v0_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
+    let w2_row = edge_function_raw(v0_2d, v1_2d, min.0 as f32 + 0.5, min.1 as f32 + 0.5);
     
-    // calculating z interpolation
-    let mut current_z: f32;
-    let (step_x_z, step_y_z, mut row_z) = {
-      let inv_z0 = inv_area / v0.pos.z;
-      let inv_z1 = inv_area / v1.pos.z;
-      let inv_z2 = inv_area / v2.pos.z;
+    // z values
+    let iz0 = 1.0 / v0.pos.z;
+    let iz1 = 1.0 / v1.pos.z;
+    let iz2 = 1.0 / v2.pos.z;
+    let inv_z0 = iz0 * inv_area;
+    let inv_z1 = iz1 * inv_area;
+    let inv_z2 = iz2 * inv_area;
     
-      let step_x_z = inv_z0 * step_x_w0 + inv_z1 * step_x_w1 + inv_z2 * step_x_w2;
-      let step_y_z = inv_z0 * step_y_w0 + inv_z1 * step_y_w1 + inv_z2 * step_y_w2;
-      
-      let row_z = inv_z0 * w0_row + inv_z1 * w1_row + inv_z2 * w2_row;
-      
-      (step_x_z, step_y_z, row_z)
-    };
+    // color values
+    let mut inv_col0 = v0.color.to_vec4() * inv_area;
+    let mut inv_col1 = v1.color.to_vec4() * inv_area;
+    let mut inv_col2 = v2.color.to_vec4() * inv_area;
     
-    // calculating interpolated colors
-    let step_x_color: Vec4;
-    let step_y_color: Vec4;
-    let mut row_color: Vec4;
-    let mut current_color: Vec4;
-    
-    if camera_info.render_config.affine_color {
-      let inv_col0 = v0.color.to_vec4() * inv_area;
-      let inv_col1 = v1.color.to_vec4() * inv_area;
-      let inv_col2 = v2.color.to_vec4() * inv_area;
-      
-      step_x_color = inv_col0 * step_x_w0 + inv_col1 * step_x_w1 + inv_col2 * step_x_w2;
-      step_y_color = inv_col0 * step_y_w0 + inv_col1 * step_y_w1 + inv_col2 * step_y_w2;
-      
-      row_color = inv_col0 * w0_row + inv_col1 * w1_row + inv_col2 * w2_row;
-    } else {
-      step_x_color = Default::default();
-      step_y_color = Default::default();
-      row_color = Default::default();
-      
-      current_color = v0.color.to_vec4() + v1.color.to_vec4() + v2.color.to_vec4();
-      current_color /= 3.0;
+    if !camera_info.render_config.affine_color {
+      inv_col0 = Vec4{ x: 0.0, y: 0.0, z: 0.0, w: 0.0 };
+      inv_col1 = Vec4{ x: 0.0, y: 0.0, z: 0.0, w: 0.0 };
+      inv_col2 = Vec4{ x: 0.0, y: 0.0, z: 0.0, w: 0.0 };
     }
     
-    // the dreaded loop
+    // uv values
+    let mut inv_uv0 = v0.uv * inv_z0; // or v0.uv * (1.0 / v0.pos.z) * inv_area
+    inv_uv0.x *= texture_size.0 as f32;
+    inv_uv0.y *= texture_size.1 as f32;
+    
+    let mut inv_uv1 = v1.uv * inv_z1;
+    inv_uv1.x *= texture_size.0 as f32;
+    inv_uv1.y *= texture_size.1 as f32;
+
+    let mut inv_uv2 = v2.uv * inv_z2;
+    inv_uv2.x *= texture_size.0 as f32;
+    inv_uv2.y *= texture_size.1 as f32;
+    
+    let inv_normal0 = v0.normal * inv_area;
+    let inv_normal1 = v1.normal * inv_area;
+    let inv_normal2 = v2.normal * inv_area;
+    
+    let build_bundle = |a: f32, b: f32, c: f32| AttributeBundle{
+      weight0: a, weight1: b, weight2: c,
+      z: inv_z0 * a + inv_z1 * b + inv_z2 * c,
+      color: inv_col0 * a + inv_col1 * b + inv_col2 * c,
+      uv: inv_uv0 * a + inv_uv1 * b + inv_uv2 * c,
+      normal: inv_normal0 * a + inv_normal1 * b + inv_normal2 * c,
+    };
+    
+    let step_x = build_bundle(step_x_w0, step_x_w1, step_x_w2);
+    let step_y = build_bundle(step_y_w0, step_y_w1, step_y_w2);
+    let mut row_attrs = build_bundle(w0_row, w1_row, w2_row);
+    
+    if !camera_info.render_config.affine_color {
+      row_attrs.color = (v0.color.to_vec4() + v1.color.to_vec4() + v2.color.to_vec4()) / 3.0;
+    }
+    
+    // the incredible loop
     for sy in min.1..=max.1 {
     
-      let mut weight0 = w0_row;
-      let mut weight1 = w1_row;
-      let mut weight2 = w2_row;
-      
+      let mut attrs = row_attrs;
       let mut row_idx = sy * screen_size.0 + min.0;
-      current_color = row_color;
-      current_z = row_z;
       
       for _ in min.0..=max.0 {
-        let is_inside_tri = (weight0 >= 0.0) && (weight1 >= 0.0) && (weight2 >= 0.0);
+        let is_inside_tri = (attrs.weight0 >= 0.0) && (attrs.weight1 >= 0.0) && (attrs.weight2 >= 0.0);
         
-        if is_inside_tri {
-          if camera_info.render_config.depth_buffering {
-            // let z_dist = weight0 * inv_area_z0 + weight1 * inv_area_z1 + weight2 * inv_area_z2;
-            
-            if current_z < self.depth_buffer[row_idx] {
-              self.depth_buffer[row_idx] = current_z;
-              buffer[row_idx] = current_color.to_u32();
-            }
-          } else {
-            buffer[row_idx] = current_color.to_u32();
-          }
+        if is_inside_tri && attrs.z < self.depth_buffer[row_idx] {
+          self.depth_buffer[row_idx] = attrs.z;
+          
+          buffer[row_idx] = self.pixel_shader(camera_info, &attrs, texture_id, texture_size);
+          // buffer[row_idx] = attrs.color.to_u32();
         }
         
-        weight0 += step_x_w0;
-        weight1 += step_x_w1;
-        weight2 += step_x_w2;
-        current_color += step_x_color;
-        current_z += step_x_z;
-
+        attrs += step_x;
         row_idx += 1;
       }
       
-      w0_row += step_y_w0;
-      w1_row += step_y_w1;
-      w2_row += step_y_w2;
-      row_color += step_y_color;
-      row_z += step_y_z;
+      row_attrs += step_y;
     }
     
+  }
+  
+  fn pixel_shader(&mut self, _camera: &CameraInfo, attrs: &AttributeBundle,
+                  texture_id: usize, texture_size: (usize, usize)) -> u32 {
+    let uv_normalized = attrs.uv / attrs.z;
+    let u_index = uv_normalized.x as usize % texture_size.0;
+    let v_index = uv_normalized.y as usize % texture_size.1;
+    
+    let tex = self.tm.at_raw(texture_id, u_index, v_index);
+    let darkness = 255 - ((attrs.normal.normalize().y + 1.0)/2.0 * 255.0) as i32; // [0, 255]
+    
+    let r = (((attrs.color.x as i32 * tex.r as i32) >> 8) - darkness).max(0) as u8;
+    let g = (((attrs.color.y as i32 * tex.g as i32) >> 8) - darkness).max(0) as u8;
+    let b = (((attrs.color.z as i32 * tex.b as i32) >> 8) - darkness).max(0) as u8;
+    
+    b as u32 | (g as u32) << 8 | (r as u32) << 16
   }
 }
 

@@ -1134,6 +1134,7 @@ dependencies = [
 name = "softrendered"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "softbuffer",
  "winit",
 ]

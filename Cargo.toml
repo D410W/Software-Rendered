@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bytemuck = "1.25.0"
 softbuffer = "0.4.8"
 winit = { version = "0.30.12", default-features = false, features = [
   "x11",
