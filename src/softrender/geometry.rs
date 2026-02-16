@@ -19,11 +19,11 @@ pub struct UnifiedGeometryBuffer {
 }
 
 impl UnifiedGeometryBuffer {
-  pub fn load_obj(&mut self, file_path: String) -> std::io::Result<()> {
+  pub fn load_obj(&mut self, file_path: impl AsRef<std::path::Path>) -> std::io::Result<usize> {
     self.load_textured_obj(file_path, 0)
   }
   
-  pub fn load_textured_obj(&mut self, file_path: String, texture_id: usize) -> std::io::Result<()> {
+  pub fn load_textured_obj(&mut self, file_path: impl AsRef<std::path::Path>, texture_id: usize) -> std::io::Result<usize> {
     use std::fs::File;
     use std::io::prelude::*;
     
@@ -114,7 +114,7 @@ impl UnifiedGeometryBuffer {
     
     self.models.push(m_info);
     
-    Ok(())
+    Ok(self.models.len() - 1)
   }
   
   // pub fn init(&mut self) {

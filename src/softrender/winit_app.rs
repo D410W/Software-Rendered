@@ -5,7 +5,6 @@ use winit::application::ApplicationHandler;
 use winit::event_loop::{ActiveEventLoop, OwnedDisplayHandle};
 use winit::event::WindowEvent;
 use winit::window::{Window, WindowId};
-use winit::keyboard::Key;
 
 use crate::softrender::{Renderer, GameState};
 
@@ -48,6 +47,8 @@ impl<T: GameState> ApplicationHandler for App<T> {
       WindowEvent::CloseRequested => {
         println!("The close button was pressed. Stopping...");
         
+        self.game_state.exit(&mut self.renderer);
+        
         let final_fps = self.renderer.frame_counter as f32 / self.renderer.program_start.elapsed().as_secs_f32();
         println!("average fps through execution: {}.", final_fps);
         
@@ -64,21 +65,7 @@ impl<T: GameState> ApplicationHandler for App<T> {
         ).unwrap();
       },
       WindowEvent::KeyboardInput{ device_id: _, event: key_event, is_synthetic: _ } => {
-        if key_event.state == winit::event::ElementState::Pressed && let Key::Character(c) = key_event.logical_key {
-          match c.as_bytes()[0] as char {
-            'w' => { self.renderer.camera_info.position.z -= 0.1; }
-            's' => { self.renderer.camera_info.position.z += 0.1; }
-            'a' => { self.renderer.camera_info.position.x -= 0.1; }
-            'd' => { self.renderer.camera_info.position.x += 0.1; }
-            'q' => { self.renderer.camera_info.position.y -= 0.1; }
-            'e' => { self.renderer.camera_info.position.y += 0.1; }
-            'j' => { self.renderer.camera_info.rotation.y += 0.1; }
-            'l' => { self.renderer.camera_info.rotation.y -= 0.1; }
-            'i' => { self.renderer.camera_info.rotation.x += 0.1; }
-            'k' => { self.renderer.camera_info.rotation.x -= 0.1; }
-            _ => (),
-          }
-        }
+        self.game_state.key_input(&mut self.renderer, key_event);
       }
       WindowEvent::RedrawRequested => {
         let Some(ref mut surface) = self.surface else {
@@ -87,13 +74,15 @@ impl<T: GameState> ApplicationHandler for App<T> {
         };
         let window = self.window.as_ref().unwrap();
         
+        self.game_state.update(&mut self.renderer);
+        self.game_state.draw(&mut self.renderer);
         self.renderer.redraw(surface, &window);
         
-        // if self.renderer.frame_counter >= 100 {
-        //   let final_fps = self.renderer.frame_counter as f32 / self.renderer.program_start.elapsed().as_secs_f32();
-        //   println!("average fps through execution: {}.", final_fps);
-        //   event_loop.exit();
-        // }
+        if !self.game_state.should_run(&mut self.renderer) {
+          let final_fps = self.renderer.frame_counter as f32 / self.renderer.program_start.elapsed().as_secs_f32();
+          println!("average fps through execution: {}.", final_fps);
+          event_loop.exit();
+        }
         window.request_redraw();
       }
       _ => (),

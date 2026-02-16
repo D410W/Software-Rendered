@@ -30,10 +30,11 @@ pub struct Renderer {
   depth_buffer: Vec<f32>,
   downscaled_db: Vec<f32>,
   
+  pub instances: Vec<Instance>,
   pub camera_info: CameraInfo,
   
   // texturing
-  pub tm: TextureManager,
+  tm: TextureManager,
   
   // debug
   triangles_rendered: u32,
@@ -42,34 +43,10 @@ pub struct Renderer {
 impl Renderer {
   
   pub fn new() -> Self {
-    let mut file = File::open("src/dennis2.dds").expect("File not found");
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).expect("Read failed");
 
-    if &buffer[0..4] != b"DDS " { panic!("Not a DDS file"); }
-
-    let height = u32::from_le_bytes(buffer[12..16].try_into().unwrap()) as usize;
-    let width = u32::from_le_bytes(buffer[16..20].try_into().unwrap()) as usize;
-    let pitch = u32::from_le_bytes(buffer[20..24].try_into().unwrap()) as usize;
+    let tm = TextureManager::new();
     
-    println!("{}, {}, pitch: {}", width, height, pitch);
-
-    let pixel_data_start = 128;
-    let raw_bytes = &buffer[pixel_data_start..];
-
-    let u32_pixels: Vec<u32> = raw_bytes
-      .chunks_exact(4)
-      .map(|chunk| { u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) })
-      .collect();
-    
-    let mut tm = TextureManager::new();
-    tm.load_texture_u32_vmirror(u32_pixels.as_slice(), width, height);
-    
-    let mut ugb = UnifiedGeometryBuffer::default();
-    ugb.load_obj("src/monke.obj".to_string()).unwrap();
-    ugb.load_textured_obj("src/dennis.obj".to_string(), 1).unwrap();
-    ugb.load_obj("src/untitled.obj".to_string()).unwrap();
-    ugb.load_obj("src/monke_smooth.obj".to_string()).unwrap();
+    let ugb = UnifiedGeometryBuffer::default();
     
     Renderer{
       program_start: Instant::now(),
@@ -77,13 +54,14 @@ impl Renderer {
       fps_measurement: 0.0,
       frame_counter: 0,
       
-      frametime_hist: VecDeque::<f32>::from(vec![16.6; 10]),
+      frametime_hist: VecDeque::<f32>::from(vec![0.0; 10]),
       
       ugb,
       depth_buffer: Vec::new(),
       downscaled_db: Vec::new(),
+      instances: Vec::new(),
       camera_info: CameraInfo{
-        position: Vec3{ x: 0.0, y: 0.0, z: 1.3 },
+        position: Vec3{ x: 0.0, y: 0.0, z: 0.0 },
         rotation: Vec3{ x: 0.0, y: 0.0, z: 0.0 },
         render_config: RenderConfig{
           face_culling: CullingEnum::Back,
@@ -97,6 +75,34 @@ impl Renderer {
       
       triangles_rendered: 0,
     }
+  }
+  
+  pub fn load_texture(&mut self, file_path: impl AsRef<std::path::Path>) -> std::io::Result<usize> {
+    let mut file = File::open(file_path)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).expect("Read failed");
+
+    if &buffer[0..4] != b"DDS " { return Err(std::io::Error::other("Not a DDS file")); }
+
+    let height = u32::from_le_bytes(buffer[12..16].try_into().unwrap()) as usize;
+    let width = u32::from_le_bytes(buffer[16..20].try_into().unwrap()) as usize;
+    // let pitch = u32::from_le_bytes(buffer[20..24].try_into().unwrap()) as usize;
+    
+    let pixel_data_start = 128;
+    let raw_bytes = &buffer[pixel_data_start..];
+
+    let u32_pixels: Vec<u32> = raw_bytes
+      .chunks_exact(4)
+      .map(|chunk| { u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]) })
+      .collect();
+    
+    return Ok(self.tm.load_texture_u32_vmirror(u32_pixels.as_slice(), width, height));
+  }
+  pub fn load_obj(&mut self, file_path: impl AsRef<std::path::Path>) -> std::io::Result<usize> {
+    self.ugb.load_obj(file_path)
+  }
+  pub fn load_textured_obj(&mut self, file_path: impl AsRef<std::path::Path>, texture_id: usize) -> std::io::Result<usize> {
+    self.ugb.load_textured_obj(file_path, texture_id)
   }
   
   fn update_fps(&mut self) {
@@ -124,7 +130,7 @@ impl Renderer {
     self.depth_buffer.fill(f32::INFINITY);
     
     let downscaled_factor = 8;
-    self.downscaled_db.resize(buffer.len() / downscaled_factor, 0.0);
+    self.downscaled_db.resize(buffer.len() / usize::pow(downscaled_factor, 2), 0.0);
     self.downscaled_db.fill(0.0);
     
     // for id in 0..50 {
@@ -168,15 +174,12 @@ impl Renderer {
     //   },
     //   self.camera_info,
     // );
-    
-    self.rasterize_model(&mut buffer,
-      Instance{
-        model_index: 3,
-        position: Vec3{x: 0.0, y: 0.0, z: -3.0},
-        rotation: Vec3{x: 0.0, y: 0.0, z: 0.0},
-      },
-      self.camera_info,
-    );
+        
+    let mut instances = self.instances.clone();
+    instances.sort_by(|a, b| a.position.z.total_cmp(&b.position.z));
+    for inst in instances.iter() {
+      self.rasterize_model(&mut buffer, *inst, self.camera_info);
+    }
     
     // let width = buffer.width().get();
     // for y in 0..buffer.height().get() {
