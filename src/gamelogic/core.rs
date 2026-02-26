@@ -12,11 +12,11 @@ impl GameState for PlaneGame {
     // let dennis_tex = renderer.load_texture_dds("src/dennis_uncompressed.dds").unwrap(); // file is too big. won't push it to repo
     
     let _ = renderer.load_model_obj("src/monke.obj").unwrap();
-    let dennis_id = renderer.load_textured_model_obj("src/dennis.obj", dennis_tex).unwrap();
+    // let dennis_id = renderer.load_textured_model_obj("src/dennis.obj", dennis_tex).unwrap();
     let smonke_model_id = renderer.load_model_obj("src/monke_smooth.obj").unwrap();
     let cube_id = renderer.load_model_obj("src/untitled.obj").unwrap();
     
-    renderer.remove_model(dennis_id);
+    // renderer.remove_model(dennis_id);
     renderer.remove_model(cube_id);
     
     println!("smonke: {smonke_model_id}, cube: {cube_id}");
