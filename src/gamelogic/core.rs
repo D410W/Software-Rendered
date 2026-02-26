@@ -9,16 +9,20 @@ pub struct PlaneGame {
 
 impl GameState for PlaneGame {
   fn new(renderer: &mut Renderer) -> Self {
-    let dennis_tex = renderer.load_texture("src/dennis2.dds").unwrap();
+    let dennis_tex = renderer.load_texture_dds("src/dennis2.dds").unwrap();
     
-    let _ = renderer.load_obj("src/monke.obj").unwrap();
-    let _ = renderer.load_textured_obj("src/dennis.obj", dennis_tex).unwrap();
-    let _ = renderer.load_obj("src/untitled.obj").unwrap();
-    let smonke_model_id = renderer.load_obj("src/monke_smooth.obj").unwrap();
+    let _ = renderer.load_model_obj("src/monke.obj").unwrap();
+    let dennis_id = renderer.load_textured_model_obj("src/dennis.obj", dennis_tex).unwrap();
+    let smonke_model_id = renderer.load_model_obj("src/monke_smooth.obj").unwrap();
+    renderer.remove_model(dennis_id);
+    let cube_id = renderer.load_model_obj("src/untitled.obj").unwrap();
+    renderer.remove_model(cube_id);
+    
+    println!("smonke: {smonke_model_id}, cube: {cube_id}");
     
     renderer.instances.push(
       Instance{
-        model_index: smonke_model_id,
+        model_id: smonke_model_id,
         position: Vec3{x: 0.0, y: 0.0, z: -3.0},
         rotation: Vec3{x: 0.0, y: 0.0, z: 0.0},
       }

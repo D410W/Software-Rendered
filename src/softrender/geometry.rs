@@ -2,9 +2,15 @@ use crate::softrender::{Vec2, Vec3, Vertex, Color};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ModelInfo {
-  pub base_vertex: usize, // Where this model starts in the global vertex buffer
-  pub index_start: usize, // Where this model's indices start
-  pub index_count: usize, // How many indices to draw
+  /// This model's id. Used for UnifiedGeometryBuffer's internal array ordering.
+  id: usize,
+  /// Where this model starts in the global vertex buffer.
+  pub base_vertex: usize,
+  /// Where this model's vertices' indices start.
+  pub index_start: usize,
+  /// How many indices to draw.
+  pub index_count: usize,
+  /// Texture id used by this model.
   pub texture_id: usize,
   
   pub min_extents: Vec3,
@@ -13,17 +19,21 @@ pub struct ModelInfo {
 
 #[derive(Default)]
 pub struct UnifiedGeometryBuffer {
-  pub vertices: Vec<Vertex>, // Every vertex for every model, one after the other
-  pub indices: Vec<usize>,   // Every index for every model, one after the other
-  pub models: Vec<ModelInfo>, // Metadata to find specific models
+  /// Every vertex for every model, one after the other.
+  pub vertices: Vec<Vertex>,
+  /// Contains triplets of vertex indices for every triangle in a model, stored sequentially through the models.
+  pub indices: Vec<usize>,
+  /// Metadata to find specific models.
+  pub models: Vec<ModelInfo>,
+  models_loaded: usize,
 }
 
 impl UnifiedGeometryBuffer {
-  pub fn load_obj(&mut self, file_path: impl AsRef<std::path::Path>) -> std::io::Result<usize> {
-    self.load_textured_obj(file_path, 0)
+  pub fn load_model_obj(&mut self, file_path: impl AsRef<std::path::Path>) -> std::io::Result<usize> {
+    self.load_textured_model_obj(file_path, 0)
   }
   
-  pub fn load_textured_obj(&mut self, file_path: impl AsRef<std::path::Path>, texture_id: usize) -> std::io::Result<usize> {
+  pub fn load_textured_model_obj(&mut self, file_path: impl AsRef<std::path::Path>, texture_id: usize) -> std::io::Result<usize> {
     use std::fs::File;
     use std::io::prelude::*;
     
@@ -33,6 +43,7 @@ impl UnifiedGeometryBuffer {
     file.read_to_string(&mut contents)?;
     
     let mut m_info = ModelInfo{
+      id: self.models_loaded,
       base_vertex: self.vertices.len(),
       index_start: self.indices.len(),
       index_count: 0,
@@ -40,6 +51,7 @@ impl UnifiedGeometryBuffer {
       min_extents: Vec3{ x:  f32::INFINITY, y:  f32::INFINITY, z:  f32::INFINITY },
       max_extents: Vec3{ x: -f32::INFINITY, y: -f32::INFINITY, z: -f32::INFINITY },
     };
+    self.models_loaded += 1;
     
     let mut indices = Vec::<usize>::new();
     let mut vertices = Vec::<Vertex>::new();
@@ -110,20 +122,71 @@ impl UnifiedGeometryBuffer {
     self.vertices.append(&mut vertices);
     self.indices.append(&mut indices);
     
-    println!{"{:?}", m_info};
+    println!("{:?}", m_info);
     
     self.models.push(m_info);
     
-    Ok(self.models.len() - 1)
+    Ok(m_info.id)
   }
   
-  // pub fn init(&mut self) {
-  //   let _ = self.load_obj("src/monke.obj".to_string());
-  // }
+  pub fn get_model_index(&mut self, id: usize) -> Option<usize> {
+    let mut left = 0;
+    let mut right = self.models.len() - 1;
+    let mut middle;
+    
+    while left <= right {
+      middle = (right + left) / 2;
+      
+      if self.models[middle].id == id {
+        return Some(middle);
+      } else if self.models[middle].id < id {
+        left = middle + 1;
+      } else { // self.models[middle].id > id
+        right = middle - 1;
+      }
+    }
+    
+    return None;
+  }
+
+  pub fn get_model(&mut self, id: usize) -> Option<ModelInfo> {
+    if let Some(model_index) = self.get_model_index(id) {
+      return Some(self.models[model_index]);
+    }
+    return None;
+  }
   
-  // pub fn load_obj(&mut self, file_path: String) {
-  //   let _ = self.load_obj(file_path);
-  // }
+  pub fn remove_model(&mut self, id: usize) -> bool {
+    let Some(model_index) = self.get_model_index(id) else {
+      return false;
+    };
+    
+    let model_info = self.models[model_index];
+    
+    // removing triangle vertex indices
+    let indices_range = (model_info.index_start)..(model_info.index_start + model_info.index_count);
+    self.indices.drain(indices_range);
+    
+    // removing vertices
+    let vertex_count = if model_index == self.models.len() - 1 {
+      self.vertices.len() - model_info.base_vertex
+    } else {
+      self.models[model_index + 1].base_vertex - model_info.base_vertex
+    };
+    let vertices_range = (model_info.base_vertex)..(model_info.base_vertex + vertex_count);
+    self.vertices.drain(vertices_range);
+    
+    // fixing ids for affected guys
+    for i in (model_index + 1)..self.models.len() {
+      self.models[i].index_start -= model_info.index_count;
+      self.models[i].base_vertex -= vertex_count;
+    }
+    
+    // removing model info
+    self.models.remove(model_index);
+    
+    return true;
+  }
   
   fn parse_triangle_obj(&mut self, verts: &[&str], indices: &mut Vec<usize>, vertices: &mut Vec<Vertex>,
                         positions: &Vec<Vec3>, normals: &Vec<Vec3>, uvs: &Vec<Vec2>) -> usize {

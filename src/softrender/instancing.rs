@@ -4,7 +4,7 @@ use crate::softrender::Vec3;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Instance {
-  pub model_index: usize,
+  pub model_id: usize,
   pub position: Vec3,
   pub rotation: Vec3,
 }

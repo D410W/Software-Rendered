@@ -77,7 +77,7 @@ impl Renderer {
     }
   }
   
-  pub fn load_texture(&mut self, file_path: impl AsRef<std::path::Path>) -> std::io::Result<usize> {
+  pub fn load_texture_dds(&mut self, file_path: impl AsRef<std::path::Path>) -> std::io::Result<usize> {
     let mut file = File::open(file_path)?;
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer).expect("Read failed");
@@ -98,11 +98,14 @@ impl Renderer {
     
     return Ok(self.tm.load_texture_u32_vmirror(u32_pixels.as_slice(), width, height));
   }
-  pub fn load_obj(&mut self, file_path: impl AsRef<std::path::Path>) -> std::io::Result<usize> {
-    self.ugb.load_obj(file_path)
+  pub fn load_model_obj(&mut self, file_path: impl AsRef<std::path::Path>) -> std::io::Result<usize> {
+    self.ugb.load_model_obj(file_path)
   }
-  pub fn load_textured_obj(&mut self, file_path: impl AsRef<std::path::Path>, texture_id: usize) -> std::io::Result<usize> {
-    self.ugb.load_textured_obj(file_path, texture_id)
+  pub fn load_textured_model_obj(&mut self, file_path: impl AsRef<std::path::Path>, texture_id: usize) -> std::io::Result<usize> {
+    self.ugb.load_textured_model_obj(file_path, texture_id)
+  }
+  pub fn remove_model(&mut self, id: usize) -> bool {
+    self.ugb.remove_model(id)
   }
   
   fn update_fps(&mut self) {
@@ -197,7 +200,8 @@ impl Renderer {
   }
   
   pub fn rasterize_model(&mut self, buffer: &mut SoftBuffer, instance_info: Instance, camera_info: CameraInfo) {
-    let model = self.ugb.models[instance_info.model_index];
+    // let model = self.ugb.models[instance_info.model_index];
+    let Some(model) = self.ugb.get_model(instance_info.model_id) else { return };
     
     let swidth = buffer.width().get() as usize;
     let sheight = buffer.height().get() as usize;
