@@ -510,7 +510,7 @@ impl Renderer {
     let v_index = uv_normalized.y as usize % texture_size.1;
     
     let tex = self.tm.at_raw(texture_id, u_index, v_index);
-    let darkness = 255 - ((attrs.normal.normalize().y + 1.0)/2.0 * 255.0) as i32; // [0, 255]
+    let darkness = 255 - (((attrs.normal.normalize().y + 1.0)/4.0 + 0.5) * 255.0) as i32; // [0, 255]
     
     let r = (((attrs.color.x as i32 * tex.r as i32) >> 8) - darkness).max(0) as u8;
     let g = (((attrs.color.y as i32 * tex.g as i32) >> 8) - darkness).max(0) as u8;

@@ -11,8 +11,9 @@ impl GameState for PlaneGame {
   fn new(renderer: &mut Renderer) -> Self {
     // let dennis_tex = renderer.load_texture_dds("src/dennis_uncompressed.dds").unwrap(); // file is too big. won't push it to repo
     
-    let _ = renderer.load_model_obj("src/monke.obj").unwrap();
+    let monke_id = renderer.load_model_obj("src/monke.obj").unwrap();
     // let dennis_id = renderer.load_textured_model_obj("src/dennis.obj", dennis_tex).unwrap();
+    // let dennis_id = renderer.load_model_obj("src/dennis.obj").unwrap();
     let smonke_model_id = renderer.load_model_obj("src/monke_smooth.obj").unwrap();
     let cube_id = renderer.load_model_obj("src/untitled.obj").unwrap();
     
@@ -29,13 +30,29 @@ impl GameState for PlaneGame {
       }
     );
     
+    renderer.instances.push(
+      Instance{
+        model_id: smonke_model_id,
+        position: Vec3{x: 0.0, y: -2.0, z: -3.0},
+        rotation: Vec3{x: 0.0, y: 0.0, z: 3.141},
+      }
+    );
+    
+    renderer.instances.push(
+      Instance{
+        model_id: monke_id,
+        position: Vec3{x: 3.0, y: 0.0, z: -5.0},
+        rotation: Vec3{x: 0.0, y: 0.0, z: 0.0},
+      }
+    );
+    
     PlaneGame{
       should_run: true,
     }
   }
 
-  fn update(&mut self, _renderer: &mut Renderer) {
-    
+  fn update(&mut self, renderer: &mut Renderer) {
+    renderer.instances[2].rotation.y += 0.02;
   }
   
   fn draw(&mut self, _renderer: &mut Renderer) {
