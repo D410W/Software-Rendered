@@ -12,4 +12,4 @@ I'm still working on adding new features and optimizing the pipeline. The curren
 
 Example of a working game can be found in the src/main.rs and src/gamelogic/core.rs files.
 
-(Obs.: dennis_uncompressed.dds isn't uploaded due to it's size. You can either create the uncompressed dds file or comment out the load_texture_dds and use load_model_obj.)
+(Obs.: dennis_uncompressed.dds isn't uploaded due to it's size. You can either create the uncompressed dds file or comment out load_texture_dds(...) and use load_model_obj(...).)
