@@ -10,7 +10,7 @@ pub struct PlaneGame {
 impl GameState for PlaneGame {
   fn new(renderer: &mut Renderer) -> Self {
     // let dennis_tex = renderer.load_texture_dds("src/dennis_uncompressed.dds").unwrap(); // file is too big. won't push it to repo
-    
+    //
     let monke_id = renderer.load_model_obj("src/monke.obj").unwrap();
     // let dennis_id = renderer.load_textured_model_obj("src/dennis.obj", dennis_tex).unwrap();
     // let dennis_id = renderer.load_model_obj("src/dennis.obj").unwrap();

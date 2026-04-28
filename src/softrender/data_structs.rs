@@ -95,8 +95,18 @@ impl Vec3 {
   }
   
   #[inline(always)]
-  pub fn on_new_basis(&self, bx: Vec3, by: Vec3, bz: Vec3) -> Vec3 {
+  pub fn vec_new_basis(&self, bx: Vec3, by: Vec3, bz: Vec3) -> Vec3 {
     bx * self.x + by * self.y + bz * self.z
+  }
+  
+  #[inline(always)]
+  pub fn mat_new_basis(&self, mat: Mat3) -> Vec3 {
+    mat.column(0) * self.x + mat.column(1) * self.y + mat.column(2) * self.z
+  }
+  
+  #[inline(always)]
+  pub fn compound_mat_new_basis(&self, matx: Mat3, maty: Mat3, matz: Mat3) -> Vec3 {
+    self.mat_new_basis(matx).mat_new_basis(maty).mat_new_basis(matz)
   }
   
   #[inline(always)]
@@ -129,6 +139,42 @@ impl std::ops::Mul<f32> for Vec3 { type Output = Vec3;
 impl std::ops::Div<f32> for Vec3 { type Output = Vec3;
   #[inline(always)]
   fn div(self, rhs: f32) -> Vec3 { Vec3{ x: self.x / rhs, y: self.y / rhs, z: self.z / rhs} }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Mat3 {
+  values: [f32; 9],
+}
+
+impl Mat3 {
+  pub fn new(values: [f32; 9]) -> Self {
+    return Mat3{ values: values };
+  }
+  
+  pub fn column(&self, index: usize) -> Vec3 {
+    return Vec3{ x: self.values[0 + 3 * index],
+                 y: self.values[1 + 3 * index],
+                 z: self.values[2 + 3 * index] };
+  }
+}
+
+impl std::ops::Mul<Mat3> for Mat3 { type Output = Mat3;
+  #[inline(always)]
+  fn mul(self, rhs: Mat3) -> Mat3 {
+    return Mat3{values: [
+      self.values[0] * rhs.values[0] + self.values[1] * rhs.values[3] + self.values[2] * rhs.values[6],
+      self.values[0] * rhs.values[1] + self.values[1] * rhs.values[4] + self.values[2] * rhs.values[7],
+      self.values[0] * rhs.values[2] + self.values[1] * rhs.values[5] + self.values[2] * rhs.values[8],
+      
+      self.values[3] * rhs.values[0] + self.values[4] * rhs.values[3] + self.values[5] * rhs.values[6],
+      self.values[3] * rhs.values[1] + self.values[4] * rhs.values[4] + self.values[5] * rhs.values[7],
+      self.values[3] * rhs.values[2] + self.values[4] * rhs.values[5] + self.values[5] * rhs.values[8],
+      
+      self.values[6] * rhs.values[0] + self.values[7] * rhs.values[3] + self.values[8] * rhs.values[6],
+      self.values[6] * rhs.values[1] + self.values[7] * rhs.values[4] + self.values[8] * rhs.values[7],
+      self.values[6] * rhs.values[2] + self.values[7] * rhs.values[5] + self.values[8] * rhs.values[8],
+    ]};
+  }
 }
 
 #[derive(Default, Debug, Clone, Copy)]

@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 
 use crate::softrender::{CameraInfo, RenderConfig, CullingEnum,
                         Instance, UnifiedGeometryBuffer, Vertex,
-                        Vec4, Vec3, Vec2, TextureManager,
+                        Mat3, Vec4, Vec3, Vec2, TextureManager,
                         AttributeBundle}; // structs
 use crate::softrender::{edge_function, edge_function_raw, translate_to_screen}; // funcs
 
@@ -200,7 +200,6 @@ impl Renderer {
   }
   
   pub fn rasterize_model(&mut self, buffer: &mut SoftBuffer, instance_info: Instance, camera_info: CameraInfo) {
-    // let model = self.ugb.models[instance_info.model_index];
     let Some(model) = self.ugb.get_model(instance_info.model_id) else { return };
     
     let swidth = buffer.width().get() as usize;
@@ -210,22 +209,53 @@ impl Renderer {
     let (sin_x, cos_x) = (instance_info.rotation.x).sin_cos();
     let (sin_y, cos_y) = (instance_info.rotation.y).sin_cos();
     let (sin_z, cos_z) = (instance_info.rotation.z).sin_cos();
-    let rot_x = Vec3 { x: cos_z*cos_y,                     y: sin_z*cos_y,                     z: -sin_y      };
-    let rot_y = Vec3 { x: cos_z*sin_y*sin_x - sin_z*cos_x, y: sin_z*sin_y*sin_x + cos_z*cos_x, z: cos_y*sin_x };
-    let rot_z = Vec3 { x: cos_z*sin_y*cos_x + sin_z*sin_x, y: sin_z*sin_y*cos_x - cos_z*sin_x, z: cos_y*cos_x };
     
-    let (sin_x_cam, cos_x_cam) = (-camera_info.rotation.x).sin_cos();
-    let (sin_y_cam, cos_y_cam) = (-camera_info.rotation.y).sin_cos();
-    let (sin_z_cam, cos_z_cam) = (-camera_info.rotation.z).sin_cos();
-    let cam_rot_x = Vec3 { x: cos_z_cam*cos_y_cam,                                 y: sin_z_cam*cos_y_cam,                                 z: -sin_y_cam          };
-    let cam_rot_y = Vec3 { x: cos_z_cam*sin_y_cam*sin_x_cam - sin_z_cam*cos_x_cam, y: sin_z_cam*sin_y_cam*sin_x_cam + cos_z_cam*cos_x_cam, z: cos_y_cam*sin_x_cam };
-    let cam_rot_z = Vec3 { x: cos_z_cam*sin_y_cam*cos_x_cam + sin_z_cam*sin_x_cam, y: sin_z_cam*sin_y_cam*cos_x_cam - cos_z_cam*sin_x_cam, z: cos_y_cam*cos_x_cam };
+    // let instance_rot = Mat3::new([ cos_y*cos_z + sin_y*sin_x*sin_z, cos_x*sin_z,  -sin_y*cos_z + cos_y*sin_x*sin_z,
+    //                               -cos_y*sin_z + sin_y*sin_x*cos_z,  cos_x*cos_z,  sin_y*sin_z + cos_y*sin_x*cos_z,
+    //                                sin_y*cos_x,                     -sin_x,        cos_y*cos_x ]);
     
-    let final_rot_x = rot_x.on_new_basis(cam_rot_x, cam_rot_y, cam_rot_z);
-    let final_rot_y = rot_y.on_new_basis(cam_rot_x, cam_rot_y, cam_rot_z);
-    let final_rot_z = rot_z.on_new_basis(cam_rot_x, cam_rot_y, cam_rot_z);
+    let instance_rot_x = Mat3::new([
+      1.0, 0.0,    0.0,
+      0.0, cos_x, -sin_x,
+      0.0, sin_x,  cos_x,
+    ]);
+    
+    let instance_rot_y = Mat3::new([
+       cos_y, 0.0, sin_y,
+       0.0,   1.0, 0.0,
+      -sin_y, 0.0, cos_y,
+    ]);
+    
+    let instance_rot_z = Mat3::new([
+      cos_z, -sin_z,  0.0,
+      sin_z,  cos_z,  0.0,
+      0.0,    0.0,    1.0,
+    ]);
+    
+    let (sin_x_cam, cos_x_cam) = (camera_info.rotation.x).sin_cos();
+    let (sin_y_cam, cos_y_cam) = (camera_info.rotation.y).sin_cos();
+    let (sin_z_cam, cos_z_cam) = (camera_info.rotation.z).sin_cos();
+    
+    let cam_rot_x = Mat3::new([
+      1.0, 0.0,    0.0,
+      0.0, cos_x_cam, -sin_x_cam,
+      0.0, sin_x_cam,  cos_x_cam,
+    ]);
+    
+    let cam_rot_y = Mat3::new([
+       cos_y_cam, 0.0, sin_y_cam,
+       0.0,   1.0, 0.0,
+      -sin_y_cam, 0.0, cos_y_cam,
+    ]);
+    
+    let cam_rot_z = Mat3::new([
+      cos_z_cam, -sin_z_cam,  0.0,
+      sin_z_cam,  cos_z_cam,  0.0,
+      0.0,    0.0,    1.0,
+    ]);
+    
     let final_rel_pos = (instance_info.position - camera_info.position)
-                        .on_new_basis(cam_rot_x, cam_rot_y, cam_rot_z);
+                        .compound_mat_new_basis(cam_rot_y, cam_rot_x, cam_rot_z);
     
     let mut model_bounding_min = Vec2{ x:  f32::INFINITY, y:  f32::INFINITY };
     let mut model_bounding_max = Vec2{ x: -f32::INFINITY, y: -f32::INFINITY };
@@ -237,7 +267,8 @@ impl Renderer {
           x: if i & 1 == 0 { model.min_extents.x } else { model.max_extents.x },
           y: if i & 2 == 0 { model.min_extents.y } else { model.max_extents.y },
           z: if i & 4 == 0 { model.min_extents.z } else { model.max_extents.z },
-        }.on_new_basis(final_rot_x, final_rot_y, final_rot_z) + final_rel_pos;
+        }.compound_mat_new_basis(instance_rot_x, instance_rot_y, instance_rot_z)
+          .compound_mat_new_basis(cam_rot_y, cam_rot_x, cam_rot_z) + final_rel_pos;
         
         if corner.z >= 0.0 { continue; }
         
@@ -309,9 +340,12 @@ impl Renderer {
       let mut v1 = self.ugb.vertices[model.base_vertex + idx1];
       let mut v2 = self.ugb.vertices[model.base_vertex + idx2];
       
-      v0.pos = v0.pos.on_new_basis(final_rot_x, final_rot_y, final_rot_z) + final_rel_pos;
-      v1.pos = v1.pos.on_new_basis(final_rot_x, final_rot_y, final_rot_z) + final_rel_pos;
-      v2.pos = v2.pos.on_new_basis(final_rot_x, final_rot_y, final_rot_z) + final_rel_pos;
+      v0.pos = v0.pos.compound_mat_new_basis(instance_rot_x, instance_rot_y, instance_rot_z)
+        .compound_mat_new_basis(cam_rot_y, cam_rot_x, cam_rot_z) + final_rel_pos;
+      v1.pos = v1.pos.compound_mat_new_basis(instance_rot_x, instance_rot_y, instance_rot_z)
+        .compound_mat_new_basis(cam_rot_y, cam_rot_x, cam_rot_z) + final_rel_pos;
+      v2.pos = v2.pos.compound_mat_new_basis(instance_rot_x, instance_rot_y, instance_rot_z)
+        .compound_mat_new_basis(cam_rot_y, cam_rot_x, cam_rot_z) + final_rel_pos;
       
       let mut should_skip = false;
       for v in [&v0, &v1, &v2] {
